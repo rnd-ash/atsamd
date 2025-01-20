@@ -1,7 +1,7 @@
 use core::{marker::PhantomData, mem::ManuallyDrop};
 
 use atsamd_hal_macros::{hal_cfg, hal_module};
-use atsame51j::Mclk;
+use atsame51j::{Mclk, Peripherals};
 use seq_macro::seq;
 
 use crate::{pac, gpio::AnyPin, typelevel::{NoneT, Sealed}};
@@ -10,9 +10,20 @@ use crate::{pac, gpio::AnyPin, typelevel::{NoneT, Sealed}};
     any("adc-d11", "adc-d21") => "adc/d11/mod.rs",
     "adc-d5x" => "adc/d5x/mod.rs",
 )]
-mod impls {}
+pub mod impls {}
 
 pub use crate::adc_settings::*;
+
+use crate::pac::adc0;
+
+/// Samples per reading
+pub use adc0::avgctrl::Samplenumselect as SampleRate;
+/// Clock frequency relative to the system clock
+pub use adc0::ctrla::Prescalerselect as Prescaler;
+/// Reading resolution in bits
+pub use adc0::ctrlb::Resselselect as Resolution;
+/// Reference voltage (or its source)
+pub use adc0::refctrl::Refselselect as Reference;
 
 use super::{calibration, clock::Adc0Clock};
 
@@ -52,7 +63,9 @@ impl Adc0Channel {
         self.select(adc);
         adc.power_up();
         adc.start_conversion();
+        adc.enable_interrupts();
         while adc.adc.intflag().read().resrdy().bit_is_clear() {}
+        adc.disable_interrupts();
         let res = adc.adc.result().read().result().bits();
         adc.power_down();
         res
@@ -63,13 +76,56 @@ impl Adc0Channel {
     }
 
     #[cfg(feature="async")]
-    pub async fn read(&self, _adc: &mut Adc0) -> u16 {
-        todo!()
+    pub async fn read(&self, adc: &mut Adc0) -> u16 {
+        use core::{future::poll_fn, task::Poll};
+
+        self.select(adc);
+        adc.power_up();
+        adc.start_conversion();
+        poll_fn(|cx| {
+
+            if adc.is_interrupt() {
+                let result = adc.adc.result().read().result().bits();
+
+                adc.power_down();
+                adc.disable_interrupts();
+                return Poll::Ready(result);
+            }
+
+
+            impls::async_api::ADC_WAKERS[0].register(cx.waker());
+            adc.enable_interrupts();
+
+            Poll::Pending
+        }).await
     }
 
     #[cfg(feature="async")]
     pub async fn read_buffer(&self, _adc: &mut Adc0, dst: &mut [u16]) {
         todo!()
+    }
+}
+
+pub trait Adc {
+    #[cfg(feature = "async")]
+    type Interrupt: crate::async_hal::interrupts::InterruptSource;
+    fn reg_block(peripherals: &mut Peripherals) -> &crate::pac::adc0::RegisterBlock;
+
+    /// Get a reference to this [`Adc`]'s associated RX Waker
+    #[cfg(feature = "async")]
+    #[inline]
+    fn waker() -> &'static embassy_sync::waitqueue::AtomicWaker;
+}
+
+impl Adc for Adc0 {
+    type Interrupt = crate::async_hal::interrupts::ADC0;
+    
+    fn reg_block(peripherals: &mut Peripherals) -> &crate::pac::adc0::RegisterBlock {
+        &peripherals.adc0
+    }
+    
+    fn waker() -> &'static embassy_sync::waitqueue::AtomicWaker {
+        &impls::async_api::ADC_WAKERS[0]
     }
 }
 
@@ -80,7 +136,6 @@ pub struct Adc0 {
 impl Adc0 {
     pub fn new(adc0: pac::Adc0, settings: AdcSettingsBuilder, mclk: &mut Mclk, _clock: Adc0Clock) -> Self {
         mclk.apbdmask().modify(|_, w| w.adc0_().set_bit());
-
         // Calibrate and setup the Vref (This is done once)
         adc0.calib().write(|w| unsafe {
             w.biascomp().bits(calibration::adc0_biascomp_scale_cal());
@@ -93,6 +148,12 @@ impl Adc0 {
         };
 
         new_adc.configure(settings);
+
+        new_adc.adc
+            .refctrl()
+            .modify(|_, w| w.refsel().variant(Reference::Intref));
+        while new_adc.adc.syncbusy().read().refctrl().bit_is_set() {}
+
         new_adc
     }
 
@@ -118,6 +179,27 @@ impl Adc0 {
         while self.adc.syncbusy().read().sampctrl().bit_is_set() {}
         self.adc.inputctrl().modify(|_, w| w.muxneg().gnd()); // No negative input (internal gnd)
         while self.adc.syncbusy().read().inputctrl().bit_is_set() {}
+
+
+        use adc0::avgctrl::Samplenumselect;
+
+        match settings.accumulation {
+            AdcAccumulation::Single => {
+                self.adc.avgctrl().modify(|_, w| {
+                    w.samplenum().variant(Samplenumselect::_1);
+                    unsafe {
+                        w.adjres().bits(0)
+                    }
+                });
+            },
+            AdcAccumulation::Average(adc_sample_count) => todo!(),
+            AdcAccumulation::Summed(adc_sample_count) => todo!(),
+        }
+        while self.adc.syncbusy().read().avgctrl().bit_is_set() {}
+    }
+
+    fn is_interrupt(&self) -> bool {
+        self.adc.intflag().read().resrdy().bit_is_set()
     }
 
     fn power_up(&mut self) {
