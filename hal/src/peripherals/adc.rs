@@ -96,7 +96,15 @@ impl Adc0Channel {
             impls::async_api::ADC_WAKERS[0].register(cx.waker());
             adc.enable_interrupts();
 
-            Poll::Pending
+            if adc.is_interrupt() {
+                let result = adc.adc.result().read().result().bits();
+
+                adc.power_down();
+                adc.disable_interrupts();
+                Poll::Ready(result)
+            } else {
+                Poll::Pending
+            }
         }).await
     }
 
