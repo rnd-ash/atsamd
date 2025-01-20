@@ -167,6 +167,7 @@ macro_rules! adc_hal {
     ($($ADC:ident: ($init:ident, $mclk:ident, $apmask:ident, $compcal:ident, $refcal:ident, $r2rcal:ident),)+) => {
         $(
 impl Adc<$ADC> {
+//Adc0: (adc0, apbdmask, adc0_, adc0_biascomp_scale_cal, adc0_biasref_scale_cal, adc0_biasr2r_scale_cal),
     pub fn $init(adc: $ADC, mclk: &mut Mclk, clocks: &mut GenericClockController, gclk:Genselect) -> Self {
         mclk.$mclk().modify(|_, w| w.$apmask().set_bit());
         // set to 1/(1/(48000000/32) * 6) = 250000 SPS
