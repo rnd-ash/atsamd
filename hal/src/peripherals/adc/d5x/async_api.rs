@@ -8,14 +8,13 @@ use embassy_sync::waitqueue::AtomicWaker;
 const NEW_WAKER: AtomicWaker = AtomicWaker::new();
 pub static ADC_WAKERS: [AtomicWaker; 2] = [NEW_WAKER; 2];
 
-
 /// Interrupt handler for the ADC peripheral.
 pub struct InterruptHandler<A: AdcInstance> {
     _private: (),
-    _adc: PhantomData<A>
+    _adc: PhantomData<A>,
 }
 
-impl<A: AdcInstance> crate::typelevel::Sealed for InterruptHandler<A>{}
+impl<A: AdcInstance> crate::typelevel::Sealed for InterruptHandler<A> {}
 
 impl<A: AdcInstance> Handler<A::Interrupt> for InterruptHandler<A> {
     unsafe fn on_interrupt() {
@@ -24,7 +23,6 @@ impl<A: AdcInstance> Handler<A::Interrupt> for InterruptHandler<A> {
         critical_section::with(|_| {
             // Just check if result ready is set. Todo - Handle overrun and other interrupt reasons
             if adc.intflag().read().resrdy().bit_is_set() {
-                adc.intflag().modify(|_, w| w.resrdy().set_bit());
                 // Wake up!
                 A::waker().wake();
             } else {
