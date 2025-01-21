@@ -1,10 +1,10 @@
 use core::{marker::PhantomData, ops::Deref};
 
 use atsamd_hal_macros::{hal_cfg, hal_module};
-use atsame51j::Peripherals;
 use fugit::RateExtU32;
 use impls::async_api;
 use pac::Mclk;
+use pac::Peripherals;
 use seq_macro::seq;
 
 use crate::{
