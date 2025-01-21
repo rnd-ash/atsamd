@@ -1,7 +1,7 @@
 use crate::adc::*;
 use atsamd_hal_macros::hal_cfg;
 
-use crate::gpio::{self, pin::*, PinMode};
+use crate::gpio::{pin::*, PinMode};
 
 macro_rules! adc_pins {
     (
@@ -14,11 +14,11 @@ macro_rules! adc_pins {
         crate::paste::item! {
             $(
                 $( #[$cfg] )?
-                impl AdcPin<[<$Adc>], [<Ch $CHAN>]>for Pin<$PinId, AlternateB> {
-                    type Configured = Self;
+                impl<M: PinMode> AdcPin<$Adc, [<Ch $CHAN>]> for Pin<$PinId, M> {
+                    type Configured = Pin<$PinId, AlternateB>;
 
                     fn into_function(self) -> Self::Configured {
-                        self
+                        self.into_alternate()
                     }
                 }
             )+
