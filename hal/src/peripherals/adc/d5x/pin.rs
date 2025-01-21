@@ -1,35 +1,7 @@
-use atsamd_hal_macros::hal_cfg;
 use crate::adc::*;
+use atsamd_hal_macros::hal_cfg;
 
-use crate::gpio::{
-    self, pin::*, PinMode,
-};
-
-/*
-#[allow(unused_macros)]
-macro_rules! adc_pins {
-    (
-        $Adc:ident {
-            $(
-                $(#[$attr:meta])*
-                ($PinType:ident, &Channel:literal),
-            )+
-        }
-    ) => {
-
-        crate::paste::item! {
-            $(
-                $(#[$attr])*
-                impl<M: PinMode> [<$Adc Pin>] for Pin<gpio::$PinType, M> {
-                    //type ChId = [<Ch $num>];
-                    const CHANNEL: u8 = $Channel;
-                }
-            )+
-
-        }
-    };
-}
-*/
+use crate::gpio::{self, pin::*, PinMode};
 
 macro_rules! adc_pins {
     (
@@ -42,8 +14,12 @@ macro_rules! adc_pins {
         crate::paste::item! {
             $(
                 $( #[$cfg] )?
-                impl [<$Adc Pin>] for Pin<$PinId, AlternateB> {
-                    const CHANNEL: u8 = $CHAN;
+                impl AdcPin<[<$Adc>], [<Ch $CHAN>]>for Pin<$PinId, AlternateB> {
+                    type Configured = Self;
+
+                    fn into_function(self) -> Self::Configured {
+                        self
+                    }
                 }
             )+
         }
