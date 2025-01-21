@@ -25,6 +25,20 @@ use super::{
     clock::{self, Adc0Clock},
 };
 
+use crate::pac::adc0;
+
+pub use adc0::avgctrl::Samplenumselect;
+/// Samples per reading
+pub use adc0::avgctrl::Samplenumselect as SampleRate;
+/// Clock frequency relative to the system clock
+pub use adc0::ctrla::Prescalerselect as Prescaler;
+/// Reading resolution in bits
+pub use adc0::ctrlb::Resselselect as Resolution;
+/// Reference voltage (or its source)
+pub use adc0::refctrl::Refselselect as Reference;
+
+pub use impls::async_api::InterruptHandler as AdcInterruptHandler;
+
 /// Marker type that represents an ADC channel capable of doing async
 /// operations.
 #[cfg(feature = "async")]
@@ -39,7 +53,6 @@ pub trait AdcInstance {
     type Instance: Deref<Target = pac::adc0::RegisterBlock>;
     type Clock;
 
-    fn reg_block(&self) -> &pac::adc0::RegisterBlock;
     fn peripheral_reg_block(p: &mut Peripherals) -> &pac::adc0::RegisterBlock;
     fn enable_mclk(mclk: &mut Mclk);
     fn calibrate(instance: &Self::Instance);
@@ -58,10 +71,6 @@ impl AdcInstance for Adc0 {
 
     #[cfg(feature = "async")]
     type Interrupt = crate::async_hal::interrupts::ADC0;
-
-    fn reg_block(&self) -> &pac::adc0::RegisterBlock {
-        &self.adc
-    }
 
     fn peripheral_reg_block(p: &mut Peripherals) -> &pac::adc0::RegisterBlock {
         &p.adc0
@@ -95,10 +104,6 @@ impl AdcInstance for Adc1 {
 
     #[cfg(feature = "async")]
     type Interrupt = crate::async_hal::interrupts::ADC1;
-
-    fn reg_block(&self) -> &pac::adc0::RegisterBlock {
-        &self.adc
-    }
 
     fn peripheral_reg_block(p: &mut Peripherals) -> &pac::adc0::RegisterBlock {
         &p.adc1
@@ -180,36 +185,25 @@ impl<I: AdcInstance, Id: ChId> Channel<I, Id, NoneT> {
 
 // These methods are only implemented for a Channel that holds a configured pin
 impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
-    pub fn read_blocking(&self, adc: &mut Adc<I>) -> u16 {
-        self.select(adc);
-        adc.power_up();
-        adc.start_conversion();
-        while adc.adc.intflag().read().resrdy().bit_is_clear() {}
-        let res = adc.adc.result().read().result().bits();
-        adc.power_down();
-        res
+    #[inline(always)]
+    pub fn read_blocking<F: Fn(u16)>(&self, adc: &mut Adc<I>, f: F) -> u16 {
+        //f(Id::ID as u16);
+        adc.read_blocking(Id::ID, f)
     }
 
-    pub fn read_buffer_blocking(&self, _adc: &mut Adc<I>, dst: &mut [u16]) {
+    pub fn read_buffer_blocking(&self, adc: &mut Adc<I>, dst: &mut [u16]) {
+        //adc.read_buffer_blocking(Id::ID)
         todo!()
     }
 
     #[cfg(feature = "async")]
-    pub async fn read(&self, _adc: &mut Adc<I>) -> u16 {
-        todo!()
+    pub async fn read(&self, adc: &mut Adc<I>) -> u16 {
+        adc.read(Id::ID).await
     }
 
     #[cfg(feature = "async")]
     pub async fn read_buffer(&self, _adc: &mut Adc<I>, dst: &mut [u16]) {
         todo!()
-    }
-
-    fn select(&self, adc: &mut Adc<I>) {
-        let adc = adc.reg_block();
-
-        while adc.syncbusy().read().inputctrl().bit_is_set() {}
-        adc.inputctrl()
-            .modify(|_, w| unsafe { w.muxpos().bits(Id::ID) });
     }
 }
 
@@ -225,16 +219,25 @@ impl<I: AdcInstance> Adc<I> {
         _clock: I::Clock,
     ) -> (Self, Channels<I>) {
         I::enable_mclk(mclk);
+
+        // Reset ADC here as we cannot guarantee its state
+        // This also disables the ADC
+        //adc.ctrla().modify(|_, w| w.swrst().set_bit());
+        //while adc.syncbusy().read().swrst().bit_is_set() {}
         // Calibrate and setup the Vref (This is done once)
         let mut new_adc = Self { adc };
 
-        new_adc.configure(settings);
-        I::calibrate(&new_adc.adc);
-
+        //I::calibrate(&new_adc.adc);
+        //new_adc.configure(settings);
+        //new_adc.power_down(); // Make sure ADC is offline
         (new_adc, Channels::new())
     }
 
     pub fn configure(&mut self, settings: AdcSettingsBuilder) {
+        /*
+        // Disable ADC before we do anything!
+        self.adc.ctrla().modify(|_, w| w.enable().clear_bit());
+        while self.adc.syncbusy().read().enable().bit_is_set() {}
         self.adc.ctrla().modify(|_, w| match settings.clk_divider {
             AdcDivider::Div2 => w.prescaler().div2(),
             AdcDivider::Div4 => w.prescaler().div4(),
@@ -254,10 +257,22 @@ impl<I: AdcInstance> Adc<I> {
 
         self.adc
             .sampctrl()
-            .modify(|_, w| unsafe { w.samplen().bits(settings.sample_clock_cycles) }); // sample length
+            .modify(|_, w| unsafe { w.samplen().bits(0) }); // sample length
         while self.adc.syncbusy().read().sampctrl().bit_is_set() {}
         self.adc.inputctrl().modify(|_, w| w.muxneg().gnd()); // No negative input (internal gnd)
         while self.adc.syncbusy().read().inputctrl().bit_is_set() {}
+
+        self.adc.avgctrl().modify(|_, w| {
+            w.samplenum().variant(Samplenumselect::_1);
+            unsafe { w.adjres().bits(0) }
+        });
+        while self.adc.syncbusy().read().avgctrl().bit_is_set() {}
+
+        self.adc
+            .refctrl()
+            .modify(|_, w| w.refsel().variant(Reference::Intref));
+        while self.adc.syncbusy().read().refctrl().bit_is_set() {}
+        */
     }
 
     /// Access the struct's underlying PAC object
@@ -265,12 +280,19 @@ impl<I: AdcInstance> Adc<I> {
         &self.adc
     }
 
+    #[inline(always)]
+    fn sync(&self) {
+        while self.adc.syncbusy().read().bits() != 0 {}
+    }
+
+    #[inline(always)]
     fn power_up(&mut self) {
         while self.adc.syncbusy().read().enable().bit_is_set() {}
         self.adc.ctrla().modify(|_, w| w.enable().set_bit());
         while self.adc.syncbusy().read().enable().bit_is_set() {}
     }
 
+    #[inline(always)]
     fn power_down(&mut self) {
         while self.adc.syncbusy().read().enable().bit_is_set() {}
         self.adc.ctrla().modify(|_, w| w.enable().clear_bit());
@@ -281,7 +303,8 @@ impl<I: AdcInstance> Adc<I> {
     fn start_conversion(&mut self) {
         // start conversion
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
-        // do it again because the datasheet tells us to
+        while self.adc.syncbusy().read().swtrig().bit_is_set() {}
+        //// do it again because the datasheet tells us to
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
     }
 
@@ -305,11 +328,85 @@ impl<I: AdcInstance> Adc<I> {
     fn disable_interrupts(&mut self) {
         self.adc.intenclr().write(|w| w.resrdy().set_bit());
     }
+
+    fn interrupt_result_ready(&self) -> Option<u16> {
+        if self.adc.intflag().read().resrdy().bit_is_set() {
+            self.adc.intflag().write(|w| w.resrdy().set_bit());
+            Some(self.adc.result().read().result().bits())
+        } else {
+            None
+        }
+    }
+
+    fn mux(&mut self, ch: u8) {
+        while self.adc.syncbusy().read().inputctrl().bit_is_set() {}
+        self.adc
+            .inputctrl()
+            .modify(|_, w| unsafe { w.muxpos().bits(ch) });
+        while self.adc.syncbusy().read().inputctrl().bit_is_set() {}
+    }
+
+    #[inline(always)]
+    pub fn read_blocking<F: Fn(u16)>(&mut self, ch: u8, f: F) -> u16 {
+        // Manually testing things to see why ADC does not
+        // function
+        while self.adc.syncbusy().read().bits() != 0 {}
+        self.mux(ch);
+        while self.adc.syncbusy().read().bits() != 0 {}
+        self.adc.ctrla().modify(|_, w| w.enable().set_bit());
+        for _ in 0..99 {cortex_m::asm::nop();}
+        while self.adc.syncbusy().read().enable().bit_is_set(){
+            core::hint::spin_loop();
+        };
+
+        self.adc.swtrig().modify(|_, w| w.start().set_bit());
+        while self.adc.intflag().read().resrdy().bit_is_clear() {
+            core::hint::spin_loop();
+        }
+        let res = self.adc.result().read().bits();
+        self.power_down();
+        res
+    }
+
+    #[cfg(feature = "async")]
+    async fn read(&mut self, ch: u8) -> u16 {
+        use core::{future::poll_fn, task::Poll};
+        self.mux(ch);
+        self.enable_interrupts();
+        self.power_up();
+        self.start_conversion();
+        let result = poll_fn(|cx| {
+            if let Some(v) = self.interrupt_result_ready() {
+                self.disable_interrupts();
+                return Poll::Ready(v);
+            }
+
+            I::waker().register(cx.waker());
+            self.enable_interrupts();
+            if let Some(v) = self.interrupt_result_ready() {
+                self.disable_interrupts();
+                return Poll::Ready(v);
+            }
+
+            Poll::Pending
+        })
+        .await;
+        self.power_down();
+        result
+    }
+
+    pub fn read_ptat_blocking(&mut self) -> u16 {
+        self.read_blocking(0x19, |_| {})
+    }
+
+    pub fn read_ctat_blocking(&mut self) -> u16 {
+        self.read_blocking(0x1A, |_| {})
+    }
 }
 
 // Here I declare the number of channels for the SAME51 ADC
 // TODO: declare channels for other chip variants
-#[hal_cfg(any("eic-d5x"))]
+#[hal_cfg(any("adc-d5x"))]
 macro_rules! with_num_channels {
     ($some_macro:ident) => {
         $some_macro! {16}

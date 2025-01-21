@@ -121,29 +121,6 @@ impl ADC0 {
             None
         }
     }
-
-    pub async fn oneshot_read<PIN: Channel<ADC0, ID=u8>>(&mut self, _pin: &mut PIN) -> u16 {
-        let channel = PIN::channel();
-        while self.adc.syncbusy().read().inputctrl().bit_is_set() {}
-        self.adc.inputctrl().modify(|_, w| unsafe{ w.muxpos().bits(channel) });
-
-        self.enable_interrupts();
-        self.start_conversion();
-        let v: u16 = poll_fn(|cx| {
-            if let Some(r) = self.conversion_ready() {
-                return Poll::Ready(r);
-            }
-            Self::waker().register(cx.waker());
-
-            if let Some(r) = self.conversion_ready() {
-                return Poll::Ready(r);
-            }
-            Poll::Pending
-        }).await;
-        self.disable_interrupts();
-        self.power_down();
-        v
-    }
 }
 
 /*
