@@ -1,8 +1,7 @@
 use core::{marker::PhantomData, ops::Deref};
 
 use atsamd_hal_macros::{hal_cfg, hal_module};
-use atsame51j::Peripherals;
-use pac::Mclk;
+use pac::{Mclk, Peripherals};
 use seq_macro::seq;
 
 use crate::{
@@ -20,10 +19,7 @@ mod adc_settings;
 
 pub use adc_settings::*;
 
-use super::{
-    calibration,
-    clock::{self, Adc0Clock},
-};
+use super::{calibration, clock};
 
 /// Marker type that represents an ADC channel capable of doing async
 /// operations.
