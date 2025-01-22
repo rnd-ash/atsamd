@@ -2,12 +2,15 @@ use core::{marker::PhantomData, ops::Deref};
 
 use atsamd_hal_macros::{hal_cfg, hal_module};
 use atsame51j::Peripherals;
+use fugit::RateExtU32;
+use impls::async_api;
 use pac::Mclk;
 use seq_macro::seq;
 
 use crate::{
     gpio::AnyPin,
     pac,
+    time::Hertz,
     typelevel::{NoneT, Sealed},
 };
 
@@ -39,11 +42,6 @@ pub use adc0::refctrl::Refselselect as Reference;
 
 pub use impls::async_api::InterruptHandler as AdcInterruptHandler;
 
-/// Marker type that represents an ADC channel capable of doing async
-/// operations.
-#[cfg(feature = "async")]
-pub enum AdcFuture {}
-
 /// Trait representing an ADC instance
 pub trait AdcInstance {
     #[cfg(feature = "async")]
@@ -51,7 +49,7 @@ pub trait AdcInstance {
 
     // The Adc0 and Adc1 PAC types implement Deref
     type Instance: Deref<Target = pac::adc0::RegisterBlock>;
-    type Clock;
+    type Clock: Into<Hertz>;
 
     fn peripheral_reg_block(p: &mut Peripherals) -> &pac::adc0::RegisterBlock;
     fn enable_mclk(mclk: &mut Mclk);
@@ -185,10 +183,9 @@ impl<I: AdcInstance, Id: ChId> Channel<I, Id, NoneT> {
 
 // These methods are only implemented for a Channel that holds a configured pin
 impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
-    #[inline(always)]
-    pub fn read_blocking<F: Fn(u16)>(&self, adc: &mut Adc<I>, f: F) -> u16 {
+    pub fn read_blocking(&self, adc: &mut Adc<I>) -> u16 {
         //f(Id::ID as u16);
-        adc.read_blocking(Id::ID, f)
+        adc.read_blocking(Id::ID)
     }
 
     pub fn read_buffer_blocking(&self, adc: &mut Adc<I>, dst: &mut [u16]) {
@@ -207,34 +204,52 @@ impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
     }
 }
 
+/// ADC Instance
 pub struct Adc<I: AdcInstance> {
     adc: I::Instance,
 }
 
+pub struct AsyncAdc<A: AdcInstance, I> {
+    inner: A,
+    _irqs: PhantomData<I>,
+}
+
 impl<I: AdcInstance> Adc<I> {
+    /// Construct a new ADC instance
+    ///
+    /// ## Important
+    /// This function will return None (No ADC) if the clock source provided
+    /// is faster than 100Mhz, since this is the maximum frequency for GCLK_ADCx as per
+    /// the datasheet.
+    ///
+    /// NOTE: If you plan to run the chip up to 125C, then the maximum GCLK frequency for the ADC
+    /// is restricted to 90Mhz for stable performance.
     pub fn new(
         adc: I::Instance,
         settings: AdcSettingsBuilder,
         mclk: &mut Mclk,
-        _clock: I::Clock,
-    ) -> (Self, Channels<I>) {
+        clock: I::Clock,
+    ) -> Option<(Self, Channels<I>)> {
+        if (clock.into() as Hertz).to_Hz() > 100_000_000 {
+            // Clock source is too fast
+            return None;
+        }
         I::enable_mclk(mclk);
 
         // Reset ADC here as we cannot guarantee its state
         // This also disables the ADC
-        //adc.ctrla().modify(|_, w| w.swrst().set_bit());
-        //while adc.syncbusy().read().swrst().bit_is_set() {}
+        adc.ctrla().modify(|_, w| w.swrst().set_bit());
+        while adc.syncbusy().read().swrst().bit_is_set() {}
         // Calibrate and setup the Vref (This is done once)
         let mut new_adc = Self { adc };
 
-        //I::calibrate(&new_adc.adc);
-        //new_adc.configure(settings);
-        //new_adc.power_down(); // Make sure ADC is offline
-        (new_adc, Channels::new())
+        I::calibrate(&new_adc.adc);
+        new_adc.configure(settings);
+        new_adc.power_down(); // Make sure ADC is offline
+        Some((new_adc, Channels::new()))
     }
 
     pub fn configure(&mut self, settings: AdcSettingsBuilder) {
-        /*
         // Disable ADC before we do anything!
         self.adc.ctrla().modify(|_, w| w.enable().clear_bit());
         while self.adc.syncbusy().read().enable().bit_is_set() {}
@@ -257,7 +272,7 @@ impl<I: AdcInstance> Adc<I> {
 
         self.adc
             .sampctrl()
-            .modify(|_, w| unsafe { w.samplen().bits(0) }); // sample length
+            .modify(|_, w| unsafe { w.samplen().bits(settings.sample_clock_cycles) }); // sample length
         while self.adc.syncbusy().read().sampctrl().bit_is_set() {}
         self.adc.inputctrl().modify(|_, w| w.muxneg().gnd()); // No negative input (internal gnd)
         while self.adc.syncbusy().read().inputctrl().bit_is_set() {}
@@ -272,16 +287,12 @@ impl<I: AdcInstance> Adc<I> {
             .refctrl()
             .modify(|_, w| w.refsel().variant(Reference::Intref));
         while self.adc.syncbusy().read().refctrl().bit_is_set() {}
-        */
-    }
-
-    /// Access the struct's underlying PAC object
-    fn reg_block(&self) -> &pac::adc0::RegisterBlock {
-        &self.adc
     }
 
     #[inline(always)]
     fn sync(&self) {
+        // Slightly more performant than checking the individual bits
+        // since we avoid an extra instruction to bit shift
         while self.adc.syncbusy().read().bits() != 0 {}
     }
 
@@ -320,7 +331,7 @@ impl<I: AdcInstance> Adc<I> {
 
     /// Enables an interrupt when conversion is ready.
     fn enable_interrupts(&mut self) {
-        self.adc.intflag().write(|w| w.resrdy().set_bit());
+        //self.adc.intflag().write(|w| w.resrdy().set_bit());
         self.adc.intenset().write(|w| w.resrdy().set_bit());
     }
 
@@ -338,6 +349,21 @@ impl<I: AdcInstance> Adc<I> {
         }
     }
 
+    #[inline(always)]
+    fn result(&self) -> u16 {
+        self.adc.result().read().result().bits()
+    }
+
+    #[inline(always)]
+    fn is_interrupt(&self) -> bool {
+        self.adc.intflag().read().bits() != 0
+    }
+
+    #[inline(always)]
+    fn clear_interrupt(&self) {
+        self.adc.intflag().write(|w| w.resrdy().set_bit());
+    }
+
     fn mux(&mut self, ch: u8) {
         while self.adc.syncbusy().read().inputctrl().bit_is_set() {}
         self.adc
@@ -346,61 +372,65 @@ impl<I: AdcInstance> Adc<I> {
         while self.adc.syncbusy().read().inputctrl().bit_is_set() {}
     }
 
-    #[inline(always)]
-    pub fn read_blocking<F: Fn(u16)>(&mut self, ch: u8, f: F) -> u16 {
-        // Manually testing things to see why ADC does not
-        // function
-        while self.adc.syncbusy().read().bits() != 0 {}
+    pub fn read_blocking(&mut self, ch: u8) -> u16 {
+        self.sync();
         self.mux(ch);
-        while self.adc.syncbusy().read().bits() != 0 {}
-        self.adc.ctrla().modify(|_, w| w.enable().set_bit());
-        for _ in 0..99 {cortex_m::asm::nop();}
-        while self.adc.syncbusy().read().enable().bit_is_set(){
-            core::hint::spin_loop();
-        };
-
-        self.adc.swtrig().modify(|_, w| w.start().set_bit());
-        while self.adc.intflag().read().resrdy().bit_is_clear() {
-            core::hint::spin_loop();
-        }
+        self.sync();
+        self.adc.ctrla().modify(|_, w| w.enable().set_bit()); // Enable ADC
+        self.sync();
+        self.adc.swtrig().modify(|_, w| w.start().set_bit()); // Start sample
+        while self.adc.intflag().read().resrdy().bit_is_clear() {}
         let res = self.adc.result().read().bits();
-        self.power_down();
+        self.adc.ctrla().modify(|_, w| w.enable().clear_bit()); // Stop ADC (No sync required)
         res
     }
 
     #[cfg(feature = "async")]
-    async fn read(&mut self, ch: u8) -> u16 {
+    pub async fn read(&mut self, ch: u8) -> u16 {
+        use crate::async_hal::interrupts::InterruptSource;
         use core::{future::poll_fn, task::Poll};
+        self.disable_interrupts();
+        unsafe {
+            I::Interrupt::unpend();
+            I::Interrupt::enable();
+        }
+        self.sync();
         self.mux(ch);
-        self.enable_interrupts();
-        self.power_up();
-        self.start_conversion();
+        self.sync();
+        self.adc.ctrla().modify(|_, w| w.enable().set_bit()); // Enable ADC
+        self.sync();
+        self.adc.swtrig().modify(|_, w| w.start().set_bit());
         let result = poll_fn(|cx| {
-            if let Some(v) = self.interrupt_result_ready() {
+            if self.is_interrupt() {
+                self.clear_interrupt();
                 self.disable_interrupts();
-                return Poll::Ready(v);
+                return Poll::Ready(self.result());
             }
 
             I::waker().register(cx.waker());
             self.enable_interrupts();
-            if let Some(v) = self.interrupt_result_ready() {
-                self.disable_interrupts();
-                return Poll::Ready(v);
-            }
 
+            if self.is_interrupt() {
+                self.clear_interrupt();
+                self.disable_interrupts();
+                return Poll::Ready(self.result());
+            }
             Poll::Pending
         })
         .await;
-        self.power_down();
+        self.adc.ctrla().modify(|_, w| w.enable().clear_bit()); // Stop ADC (No sync required)
+        unsafe {
+            I::Interrupt::disable();
+        }
         result
     }
 
     pub fn read_ptat_blocking(&mut self) -> u16 {
-        self.read_blocking(0x19, |_| {})
+        self.read_blocking(0x19)
     }
 
     pub fn read_ctat_blocking(&mut self) -> u16 {
-        self.read_blocking(0x1A, |_| {})
+        self.read_blocking(0x1A)
     }
 }
 
