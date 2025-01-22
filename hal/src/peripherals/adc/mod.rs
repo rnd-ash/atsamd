@@ -222,9 +222,8 @@ impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
     }
 
     #[inline]
-    pub fn read_buffer_blocking(&self, adc: &mut Adc<I>, dst: &mut [u16]) {
-        //adc.read_buffer_blocking(Id::ID)
-        todo!()
+    pub fn read_buffer_blocking(&self, adc: &mut Adc<I>, dst: &mut [u16]) -> Result<(), Error> {
+        adc.read_buffer_blocking(Id::ID, dst)
     }
 
     #[cfg(feature = "async")]
@@ -238,11 +237,11 @@ impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
 
     #[cfg(feature = "async")]
     #[inline]
-    pub async fn read_buffer<F>(&self, _adc: &mut Adc<I>, dst: &mut [u16])
+    pub async fn read_buffer<F>(&self, adc: &mut Adc<I, F>, dst: &mut [u16]) -> Result<(), Error>
     where
         F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
     {
-        todo!()
+        adc.read_buffer(Id::ID, dst).await
     }
 }
 
@@ -338,6 +337,7 @@ impl<I: AdcInstance> Adc<I> {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
 
+        self.disable_interrupts(Flags::all());
         self.mux(ch);
         self.power_up();
         self.start_conversion();
@@ -349,6 +349,30 @@ impl<I: AdcInstance> Adc<I> {
         let res = self.conversion_result();
         self.power_down();
         res
+    }
+
+    #[inline]
+    pub fn read_buffer_blocking(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
+        // Clear overrun errors that might've occured before we try to read anything
+        let _ = self.check_and_clear_flags(self.read_flags());
+        self.enable_freerunning();
+
+        self.disable_interrupts(Flags::all());
+        self.mux(ch);
+        self.power_up();
+
+        for result in dst.iter_mut() {
+            while !self.read_flags().contains(Flags::RESRDY) {
+                core::hint::spin_loop();
+            }
+
+            *result = self.conversion_result();
+            self.check_and_clear_flags(Flags::OVERRUN)?;
+        }
+
+        self.power_down();
+
+        Ok(())
     }
 
     #[inline]
@@ -467,6 +491,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
 
     /// Enables an interrupt when conversion is ready.
     #[inline]
+    #[allow(dead_code)]
     fn enable_interrupts(&mut self, flags: Flags) {
         unsafe { self.adc.intenset().write(|w| w.bits(flags.bits())) };
     }
@@ -512,6 +537,24 @@ where
 
         self.power_down();
         result
+    }
+
+    #[inline]
+    pub async fn read_buffer(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
+        // Clear overrun errors that might've occured before we try to read anything
+        let _ = self.check_and_clear_flags(self.read_flags());
+        self.enable_freerunning();
+
+        self.mux(ch);
+        self.power_up();
+
+        for result in dst.iter_mut() {
+            self.wait_flags(Flags::RESRDY).await?;
+            *result = self.conversion_result();
+        }
+
+        self.power_down();
+        Ok(())
     }
 
     /*

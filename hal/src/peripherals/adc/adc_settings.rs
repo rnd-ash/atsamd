@@ -161,7 +161,13 @@ impl AdcSettingsBuilder {
             AdcAccumulation::Average(adc_sample_count) => adc_sample_count as u32,
             AdcAccumulation::Summed(adc_sample_count) => adc_sample_count as u32,
         };
-        clocks_per_sample *= multi as u32;
+        clocks_per_sample *= multi;
         adc_clk_freq / clocks_per_sample
+    }
+}
+
+impl Default for AdcSettingsBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
