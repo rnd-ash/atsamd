@@ -1,26 +1,10 @@
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum AdcSampleCount {
-    Count1 = 1,
-    Count2 = 2,
-    Count4 = 4,
-    Count8 = 8,
-    Count16 = 16,
-    Count32 = 32,
-    Count64 = 64,
-    Count128 = 128,
-    Count256 = 256,
-    Count512 = 512,
-    Count1024 = 1024,
-}
+use crate::pac::adc0;
 
-#[derive(Copy, Clone)]
-pub enum AdcBitWidth {
-    Eight = 8,
-    Ten = 10,
-    Twelve = 12,
-}
+pub use adc0::avgctrl::Samplenumselect as AdcSampleCount;
+pub use adc0::ctrlb::Resselselect as AdcResolution;
 
 /// Result accumulation strategy for the ADC
+#[derive(Copy, Clone)]
 pub enum AdcAccumulation {
     /// The ADC will read once and then the result is ready
     Single,
@@ -74,10 +58,11 @@ pub enum AdcDivider {
 /// ```
 /// SPS = (GCLK_ADC / clk_divider) / (n * (sample_clock_cycles + bit_width))
 /// ```
+#[derive(Copy, Clone)]
 pub struct AdcSettingsBuilder {
     pub clk_divider: AdcDivider,
     pub sample_clock_cycles: u8,
-    pub bit_width: AdcBitWidth,
+    pub bit_width: AdcResolution,
     pub accumulation: AdcAccumulation,
 }
 
@@ -93,7 +78,7 @@ impl AdcSettingsBuilder {
         Self {
             clk_divider: AdcDivider::Div32,
             sample_clock_cycles: 5,
-            bit_width: AdcBitWidth::Twelve,
+            bit_width: AdcResolution::_12bit,
             accumulation: AdcAccumulation::Single,
         }
     }
@@ -110,7 +95,7 @@ impl AdcSettingsBuilder {
     }
 
     /// This setting adjusts the bit width of each ADC sample
-    pub fn sample_bit_width(mut self, bit_width: AdcBitWidth) -> Self {
+    pub fn sample_resolution(mut self, bit_width: AdcResolution) -> Self {
         self.bit_width = bit_width;
         self
     }

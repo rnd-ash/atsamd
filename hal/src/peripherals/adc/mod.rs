@@ -1,10 +1,12 @@
 use core::{marker::PhantomData, ops::Deref};
 
 use atsamd_hal_macros::{hal_cfg, hal_module};
+use pac::dmac::channel::chctrla::Trigactselect;
 use pac::{Mclk, Peripherals};
 use seq_macro::seq;
 
 use crate::{
+    dmac::{self, sram::DmacDescriptor, AnyChannel, Beat, ReadyFuture},
     gpio::AnyPin,
     pac,
     time::Hertz,
@@ -281,20 +283,16 @@ impl<I: AdcInstance> Adc<I> {
             adc,
             _irqs: PhantomData,
         };
-
-        // Reset ADC here as we cannot guarantee its state
-        // This also disables the ADC
-        new_adc.software_reset();
-
-        I::calibrate(&new_adc.adc);
         new_adc.configure(settings);
         Ok((new_adc, Channels::new()))
     }
 
     #[inline]
     pub fn configure(&mut self, settings: AdcSettingsBuilder) {
-        // Disable ADC before we do anything!
-        self.power_down();
+        // Reset ADC here as we cannot guarantee its state
+        // This also disables the ADC
+        self.software_reset();
+        I::calibrate(&self.adc);
         self.sync();
         self.adc.ctrla().modify(|_, w| match settings.clk_divider {
             AdcDivider::Div2 => w.prescaler().div2(),
@@ -306,11 +304,10 @@ impl<I: AdcInstance> Adc<I> {
             AdcDivider::Div128 => w.prescaler().div128(),
             AdcDivider::Div256 => w.prescaler().div256(),
         });
-        self.adc.ctrlb().modify(|_, w| match settings.bit_width {
-            AdcBitWidth::Eight => w.ressel()._8bit(),
-            AdcBitWidth::Ten => w.ressel()._10bit(),
-            AdcBitWidth::Twelve => w.ressel()._12bit(),
-        });
+        self.sync();
+        self.adc
+            .ctrlb()
+            .modify(|_, w| w.ressel().variant(settings.bit_width));
         self.sync();
 
         self.adc
@@ -320,10 +317,36 @@ impl<I: AdcInstance> Adc<I> {
         self.adc.inputctrl().modify(|_, w| w.muxneg().gnd()); // No negative input (internal gnd)
         self.sync();
 
-        self.adc.avgctrl().modify(|_, w| {
-            w.samplenum().variant(Samplenumselect::_1);
-            unsafe { w.adjres().bits(0) }
-        });
+        match settings.accumulation {
+            AdcAccumulation::Single => {
+                // 1 sample to be used as is
+                self.adc.avgctrl().modify(|_, w| {
+                    w.samplenum().variant(Samplenumselect::_1);
+                    unsafe { w.adjres().bits(0) }
+                });
+            }
+            AdcAccumulation::Average(adc_sample_count) => {
+                // A total of `adc_sample_count` elements will be averaged by the ADC
+                // before it returns the result
+                self.adc.avgctrl().modify(|_, w| {
+                    w.samplenum().variant(adc_sample_count);
+                    unsafe {
+                        // Table 45-3 SAME51 datasheet
+                        w.adjres()
+                            .bits(core::cmp::min(adc_sample_count as u8, 0x04))
+                    }
+                });
+            }
+            AdcAccumulation::Summed(adc_sample_count) => {
+                // A total of `adc_sample_count` elements will be summed by the ADC
+                // before it returns the result
+                self.adc.avgctrl().modify(|_, w| {
+                    w.samplenum().variant(adc_sample_count);
+                    unsafe { w.adjres().bits(0) }
+                });
+            }
+        }
+
         self.sync();
 
         self.adc
@@ -557,49 +580,6 @@ where
         self.power_down();
         Ok(())
     }
-
-    /*
-    pub async fn read_into_buffer<X: Fn(usize)>(&mut self, ch: u8, buffer: &mut [u16], f: X) {
-        if buffer.is_empty() {
-            return;
-        }
-        use core::{future::poll_fn, task::Poll};
-        self.disable_interrupts();
-        self.sync();
-        self.mux(ch);
-        self.sync();
-        self.adc.ctrla().modify(|_, w| w.enable().set_bit()); // Enable ADC
-        self.sync();
-        self.adc.swtrig().modify(|_, w| w.start().set_bit());
-        let mut pos = 0;
-        poll_fn(|cx| {
-            if self.is_interrupt() {
-                self.clear_interrupt();
-                buffer[pos] = self.result();
-                pos += 1;
-                if pos == buffer.len() {
-                    self.disable_interrupts();
-                    return Poll::Ready(());
-                }
-            }
-            f(pos);
-            I::waker().register(cx.waker());
-            self.enable_interrupts();
-            if self.is_interrupt() {
-                self.clear_interrupt();
-                buffer[pos] = self.result();
-                pos += 1;
-                if pos == buffer.len() {
-                    self.disable_interrupts();
-                    return Poll::Ready(());
-                }
-            }
-            Poll::Pending
-        })
-        .await;
-        self.adc.ctrla().modify(|_, w| w.enable().clear_bit()); // Stop ADC (No sync required)
-    }
-    */
 }
 
 // Here I declare the number of channels for the SAME51 ADC
