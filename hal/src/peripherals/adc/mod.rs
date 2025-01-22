@@ -361,7 +361,7 @@ impl<I: AdcInstance> Adc<I> {
         self.disable_interrupts(Flags::all());
         self.mux(ch);
         self.power_up();
-
+        self.start_conversion();
         for result in dst.iter_mut() {
             while !self.read_flags().contains(Flags::RESRDY) {
                 core::hint::spin_loop();
@@ -481,13 +481,13 @@ impl<I: AdcInstance, T> Adc<I, T> {
     #[inline]
     fn enable_freerunning(&mut self) {
         self.adc.ctrlb().modify(|_, w| w.freerun().set_bit());
-        while self.adc.syncbusy().read().ctrlb().bit_is_set() {}
+        self.sync();
     }
 
     #[inline]
     fn disable_freerunning(&mut self) {
         self.adc.ctrlb().modify(|_, w| w.freerun().set_bit());
-        while self.adc.syncbusy().read().ctrlb().bit_is_set() {}
+        self.sync();
     }
 
     /// Enables an interrupt when conversion is ready.
@@ -548,7 +548,7 @@ where
 
         self.mux(ch);
         self.power_up();
-
+        self.start_conversion();
         for result in dst.iter_mut() {
             self.wait_flags(Flags::RESRDY).await?;
             *result = self.conversion_result();
