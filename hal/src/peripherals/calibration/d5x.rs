@@ -59,3 +59,43 @@ pub fn adc1_biasref_scale_cal() -> u8 {
 pub fn adc1_biasr2r_scale_cal() -> u8 {
     cal(3, 0, 0b111) as u8
 }
+
+/// Temperature calibration - Integer part of calibration temperature TL
+pub fn tli() -> u8 {
+    cal(0x80, 7, 0b11111111) as u8
+}
+
+/// Temperature calibration - Decimal part of calibration temperature TL
+pub fn tld() -> u8 {
+    cal(0x80 + 1, 3, 0b1111) as u8
+}
+
+/// Temperature calibration - Integer part of calibration temperature TH
+pub fn thi() -> u8 {
+    cal(0x80 + 2, 3, 0b11111111) as u8
+}
+
+/// Temperature calibration - Decimal part of calibration temperature TH
+pub fn thd() -> u8 {
+    cal(0x80 + 2, 7, 0b1111) as u8
+}
+
+/// Temperature calibration - Parameter VPL
+pub fn vpl() -> u16 {
+    cal(0x80 + 6, 3, 0b111111111111) as u16
+}
+
+/// Temperature calibration - Parameter VPH
+pub fn vph() -> u16 {
+    cal(0x80 + 7, 7, 0b111111111111) as u16
+}
+
+/// Temperature calibration - Parameter VCL
+pub fn vcl() -> u16 {
+    cal(0x80 + 8, 7, 0b111111111111) as u16
+}
+
+/// Temperature calibration - Parameter VCH
+pub fn vch() -> u16 {
+    cal(0x80 + 9, 7, 0b111111111111) as u16
+}
