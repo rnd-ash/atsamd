@@ -1,7 +1,6 @@
 use crate::adc::*;
+use crate::gpio::pin::*;
 use atsamd_hal_macros::hal_cfg;
-
-use crate::gpio::{self, pin::*, PinMode};
 
 macro_rules! adc_pins {
     (
