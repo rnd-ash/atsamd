@@ -368,7 +368,7 @@ impl<I: AdcInstance> Adc<I> {
             }
 
             *result = self.conversion_result();
-            self.check_and_clear_flags(Flags::OVERRUN)?;
+            self.check_and_clear_flags(self.read_flags())?;
         }
 
         self.power_down();
@@ -436,7 +436,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
         }
     }
 
-    /// Check the interrupt flags, clears them and returns `Err` if an ovreflow
+    /// Check the interrupt flags, clears them and returns `Err` if an overflow
     /// occured
     #[inline]
     fn check_and_clear_flags(&mut self, flags: Flags) -> Result<(), Error> {
