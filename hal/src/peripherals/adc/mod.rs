@@ -16,8 +16,13 @@ use crate::{
     "adc-d5x" => "d5x/mod.rs",
 )]
 mod impls {}
-mod adc_settings;
 
+#[cfg(feature = "async")]
+mod async_api;
+#[cfg(feature = "async")]
+pub use async_api::*;
+
+mod adc_settings;
 pub use adc_settings::*;
 
 use super::{calibration, clock};
@@ -33,8 +38,6 @@ pub use adc0::ctrla::Prescalerselect as Prescaler;
 pub use adc0::ctrlb::Resselselect as Resolution;
 /// Reference voltage (or its source)
 pub use adc0::refctrl::Refselselect as Reference;
-
-pub use impls::async_api::InterruptHandler as AdcInterruptHandler;
 
 /// Trait representing an ADC instance
 pub trait AdcInstance {
@@ -64,14 +67,17 @@ impl AdcInstance for Adc0 {
     #[cfg(feature = "async")]
     type Interrupt = crate::async_hal::interrupts::ADC0;
 
+    #[inline]
     fn peripheral_reg_block(p: &mut Peripherals) -> &pac::adc0::RegisterBlock {
         &p.adc0
     }
 
+    #[inline]
     fn enable_mclk(mclk: &mut Mclk) {
         mclk.apbdmask().modify(|_, w| w.adc0_().set_bit());
     }
 
+    #[inline]
     fn calibrate(instance: &Self::Instance) {
         instance.calib().write(|w| unsafe {
             w.biascomp().bits(calibration::adc0_biascomp_scale_cal());
@@ -81,8 +87,9 @@ impl AdcInstance for Adc0 {
     }
 
     #[cfg(feature = "async")]
+    #[inline]
     fn waker() -> &'static embassy_sync::waitqueue::AtomicWaker {
-        &impls::async_api::ADC_WAKERS[0]
+        &async_api::ADC_WAKERS[0]
     }
 }
 
@@ -97,13 +104,17 @@ impl AdcInstance for Adc1 {
     #[cfg(feature = "async")]
     type Interrupt = crate::async_hal::interrupts::ADC1;
 
+    #[inline]
     fn peripheral_reg_block(p: &mut Peripherals) -> &pac::adc0::RegisterBlock {
         &p.adc1
     }
 
+    #[inline]
     fn enable_mclk(mclk: &mut Mclk) {
         mclk.apbdmask().modify(|_, w| w.adc1_().set_bit());
     }
+
+    #[inline]
     fn calibrate(instance: &Self::Instance) {
         instance.calib().write(|w| unsafe {
             w.biascomp().bits(calibration::adc1_biascomp_scale_cal());
@@ -113,8 +124,9 @@ impl AdcInstance for Adc1 {
     }
 
     #[cfg(feature = "async")]
+    #[inline]
     fn waker() -> &'static embassy_sync::waitqueue::AtomicWaker {
-        &impls::async_api::ADC_WAKERS[1]
+        &async_api::ADC_WAKERS[1]
     }
 }
 
@@ -148,6 +160,7 @@ pub struct Channel<I: AdcInstance, Id: ChId, P> {
 impl<I: AdcInstance, Id: ChId> Channel<I, Id, NoneT> {
     // NOTE: `new`` must be private so a channel isn't accidentally created outside this
     // module, breaking the typelevel guarantees laid out by the adc driver
+    #[inline]
     fn new() -> Channel<I, Id, NoneT> {
         Channel {
             _pin: NoneT,
@@ -161,6 +174,7 @@ impl<I: AdcInstance, Id: ChId> Channel<I, Id, NoneT> {
     ///
     /// This methods accepts any pin that can potentially be configured as an
     /// ADC channel, and automatically puts it in the Alternate B mode.
+    #[inline]
     pub fn with_pin<N: AdcPin<I, Id>>(self, pin: N) -> Channel<I, Id, N::Configured> {
         // NOTE: While AdcPin is implemented for any pin that has the *potential* to be
         // turned into an AlternateB pin (which is the ADC function), we know that any
@@ -177,28 +191,29 @@ impl<I: AdcInstance, Id: ChId> Channel<I, Id, NoneT> {
 
 // These methods are only implemented for a Channel that holds a configured pin
 impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
+    #[inline]
     pub fn read_blocking(&self, adc: &mut Adc<I, NoneT>) -> u16 {
         //f(Id::ID as u16);
         adc.read_blocking(Id::ID)
     }
 
+    #[inline]
     pub fn read_buffer_blocking(&self, adc: &mut Adc<I>, dst: &mut [u16]) {
         //adc.read_buffer_blocking(Id::ID)
         todo!()
     }
 
     #[cfg(feature = "async")]
+    #[inline]
     pub async fn read<F>(&self, adc: &mut Adc<I, F>) -> u16
     where
-        F: crate::async_hal::interrupts::Binding<
-            I::Interrupt,
-            impls::async_api::InterruptHandler<I>,
-        >,
+        F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
     {
         adc.read(Id::ID).await
     }
 
     #[cfg(feature = "async")]
+    #[inline]
     pub async fn read_buffer(&self, _adc: &mut Adc<I>, dst: &mut [u16]) {
         todo!()
     }
@@ -222,6 +237,7 @@ impl<I: AdcInstance> Adc<I> {
     ///
     /// NOTE: If you plan to run the chip up to 125C, then the maximum GCLK frequency for the ADC
     /// is restricted to 90Mhz for stable performance.
+    #[inline]
     pub fn new(
         adc: I::Instance,
         settings: AdcSettingsBuilder,
@@ -249,6 +265,7 @@ impl<I: AdcInstance> Adc<I> {
         Some((new_adc, Channels::new()))
     }
 
+    #[inline]
     pub fn configure(&mut self, settings: AdcSettingsBuilder) {
         // Disable ADC before we do anything!
         self.power_down();
@@ -289,6 +306,7 @@ impl<I: AdcInstance> Adc<I> {
         self.sync();
     }
 
+    #[inline]
     pub fn read_blocking(&mut self, ch: u8) -> u16 {
         self.mux(ch);
         self.power_up();
@@ -300,53 +318,57 @@ impl<I: AdcInstance> Adc<I> {
         res
     }
 
+    #[inline]
     pub fn read_ptat_blocking(&mut self) -> u16 {
         self.read_blocking(0x19)
     }
 
+    #[inline]
     pub fn read_ctat_blocking(&mut self) -> u16 {
         self.read_blocking(0x1A)
     }
 }
 
 impl<I: AdcInstance, T> Adc<I, T> {
-    #[inline(always)]
+    #[inline]
     fn sync(&self) {
         // Slightly more performant than checking the individual bits
         // since we avoid an extra instruction to bit shift
         while self.adc.syncbusy().read().bits() != 0 {}
     }
 
-    #[inline(always)]
+    #[inline]
     fn power_up(&mut self) {
         self.adc.ctrla().modify(|_, w| w.enable().set_bit());
         self.sync();
     }
 
-    #[inline(always)]
+    #[inline]
     fn power_down(&mut self) {
         self.adc.ctrla().modify(|_, w| w.enable().clear_bit());
         self.sync();
     }
 
-    #[inline(always)]
+    #[inline]
     fn start_conversion(&mut self) {
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
         self.sync();
     }
 
+    #[inline]
     fn enable_freerunning(&mut self) {
         self.adc.ctrlb().modify(|_, w| w.freerun().set_bit());
         while self.adc.syncbusy().read().ctrlb().bit_is_set() {}
     }
 
+    #[inline]
     fn disable_freerunning(&mut self) {
         self.adc.ctrlb().modify(|_, w| w.freerun().set_bit());
         while self.adc.syncbusy().read().ctrlb().bit_is_set() {}
     }
 
     /// Enables an interrupt when conversion is ready.
-    #[inline(always)]
+    #[inline]
     fn enable_interrupts(&mut self) {
         //self.adc.intflag().write(|w| w.resrdy().set_bit());
         self.adc.intenset().write(|w| w.resrdy().set_bit());
@@ -354,27 +376,28 @@ impl<I: AdcInstance, T> Adc<I, T> {
     }
 
     /// Disables the interrupt for when conversion is ready.
-    #[inline(always)]
+    #[inline]
     fn disable_interrupts(&mut self) {
         self.adc.intenclr().write(|w| w.resrdy().set_bit());
         self.sync();
     }
 
-    #[inline(always)]
+    #[inline]
     fn result(&self) -> u16 {
         self.adc.result().read().result().bits()
     }
 
-    #[inline(always)]
+    #[inline]
     fn is_interrupt(&self) -> bool {
         self.adc.intflag().read().bits() != 0
     }
 
-    #[inline(always)]
+    #[inline]
     fn clear_interrupt(&self) {
         self.adc.intflag().write(|w| w.resrdy().set_bit());
     }
 
+    #[inline]
     fn mux(&mut self, ch: u8) {
         self.adc
             .inputctrl()
@@ -383,12 +406,10 @@ impl<I: AdcInstance, T> Adc<I, T> {
     }
 
     #[cfg(feature = "async")]
+    #[inline]
     pub fn into_future<F>(self, _irqs: F) -> Adc<I, F>
     where
-        F: crate::async_hal::interrupts::Binding<
-            I::Interrupt,
-            impls::async_api::InterruptHandler<I>,
-        >,
+        F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
     {
         use crate::async_hal::interrupts::InterruptSource;
         unsafe {
@@ -405,8 +426,9 @@ impl<I: AdcInstance, T> Adc<I, T> {
 #[cfg(feature = "async")]
 impl<I: AdcInstance, F> Adc<I, F>
 where
-    F: crate::async_hal::interrupts::Binding<I::Interrupt, impls::async_api::InterruptHandler<I>>,
+    F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
 {
+    #[inline]
     pub async fn read(&mut self, ch: u8) -> u16 {
         use core::{future::poll_fn, task::Poll};
         self.disable_interrupts();
@@ -517,6 +539,7 @@ macro_rules! define_channels_struct {
             );
 
             impl<I: AdcInstance> Channels<I> {
+                #[inline]
                 fn new() -> Self {
                     Self (
                         #(
