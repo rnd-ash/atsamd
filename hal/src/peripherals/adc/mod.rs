@@ -39,6 +39,7 @@ pub use adc0::ctrlb::Resselselect as Resolution;
 /// Reference voltage (or its source)
 pub use adc0::refctrl::Refselselect as Reference;
 
+#[derive(Debug)]
 pub enum Error {
     /// Clock too fast.
     ///
