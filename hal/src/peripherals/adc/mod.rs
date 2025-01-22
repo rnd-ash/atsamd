@@ -177,7 +177,7 @@ impl<I: AdcInstance, Id: ChId> Channel<I, Id, NoneT> {
 
 // These methods are only implemented for a Channel that holds a configured pin
 impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
-    pub fn read_blocking(&self, adc: &mut Adc<I>) -> u16 {
+    pub fn read_blocking(&self, adc: &mut Adc<I, NoneT>) -> u16 {
         //f(Id::ID as u16);
         adc.read_blocking(Id::ID)
     }
@@ -188,7 +188,10 @@ impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
     }
 
     #[cfg(feature = "async")]
-    pub async fn read(&self, adc: &mut Adc<I>) -> u16 {
+    pub async fn read<F>(&self, adc: &mut Adc<I, F>) -> u16
+    where
+        F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
+    {
         adc.read(Id::ID).await
     }
 
@@ -199,14 +202,12 @@ impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
 }
 
 /// ADC Instance
-pub struct Adc<I: AdcInstance> {
+pub struct Adc<I: AdcInstance, F = NoneT> {
     adc: I::Instance,
+    _irqs: PhantomData<F>,
 }
 
-pub struct AsyncAdc<A: AdcInstance, I> {
-    inner: A,
-    _irqs: PhantomData<I>,
-}
+pub struct AdcFuture;
 
 impl<I: AdcInstance> Adc<I> {
     /// Construct a new ADC instance
@@ -235,7 +236,10 @@ impl<I: AdcInstance> Adc<I> {
         adc.ctrla().modify(|_, w| w.swrst().set_bit());
         while adc.syncbusy().read().swrst().bit_is_set() {}
         // Calibrate and setup the Vref (This is done once)
-        let mut new_adc = Self { adc };
+        let mut new_adc = Self {
+            adc,
+            _irqs: PhantomData,
+        };
 
         I::calibrate(&new_adc.adc);
         new_adc.configure(settings);
@@ -283,6 +287,29 @@ impl<I: AdcInstance> Adc<I> {
         while self.adc.syncbusy().read().refctrl().bit_is_set() {}
     }
 
+    pub fn read_blocking(&mut self, ch: u8) -> u16 {
+        self.sync();
+        self.mux(ch);
+        self.sync();
+        self.adc.ctrla().modify(|_, w| w.enable().set_bit()); // Enable ADC
+        self.sync();
+        self.adc.swtrig().modify(|_, w| w.start().set_bit()); // Start sample
+        while self.adc.intflag().read().resrdy().bit_is_clear() {}
+        let res = self.adc.result().read().bits();
+        self.adc.ctrla().modify(|_, w| w.enable().clear_bit()); // Stop ADC (No sync required)
+        res
+    }
+
+    pub fn read_ptat_blocking(&mut self) -> u16 {
+        self.read_blocking(0x19)
+    }
+
+    pub fn read_ctat_blocking(&mut self) -> u16 {
+        self.read_blocking(0x1A)
+    }
+}
+
+impl<I: AdcInstance, T> Adc<I, T> {
     #[inline(always)]
     fn sync(&self) {
         // Slightly more performant than checking the individual bits
@@ -366,28 +393,31 @@ impl<I: AdcInstance> Adc<I> {
         while self.adc.syncbusy().read().inputctrl().bit_is_set() {}
     }
 
-    pub fn read_blocking(&mut self, ch: u8) -> u16 {
-        self.sync();
-        self.mux(ch);
-        self.sync();
-        self.adc.ctrla().modify(|_, w| w.enable().set_bit()); // Enable ADC
-        self.sync();
-        self.adc.swtrig().modify(|_, w| w.start().set_bit()); // Start sample
-        while self.adc.intflag().read().resrdy().bit_is_clear() {}
-        let res = self.adc.result().read().bits();
-        self.adc.ctrla().modify(|_, w| w.enable().clear_bit()); // Stop ADC (No sync required)
-        res
-    }
-
     #[cfg(feature = "async")]
-    pub async fn read(&mut self, ch: u8) -> u16 {
+    pub fn into_future<F>(self, _irqs: F) -> Adc<I, F>
+    where
+        F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
+    {
         use crate::async_hal::interrupts::InterruptSource;
-        use core::{future::poll_fn, task::Poll};
-        self.disable_interrupts();
         unsafe {
             I::Interrupt::unpend();
             I::Interrupt::enable();
         }
+        Adc {
+            adc: self.adc,
+            _irqs: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+impl<I: AdcInstance, F> Adc<I, F>
+where
+    F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
+{
+    pub async fn read(&mut self, ch: u8) -> u16 {
+        use core::{future::poll_fn, task::Poll};
+        self.disable_interrupts();
         self.sync();
         self.mux(ch);
         self.sync();
@@ -400,7 +430,6 @@ impl<I: AdcInstance> Adc<I> {
                 self.disable_interrupts();
                 return Poll::Ready(self.result());
             }
-
             I::waker().register(cx.waker());
             self.enable_interrupts();
 
@@ -413,18 +442,7 @@ impl<I: AdcInstance> Adc<I> {
         })
         .await;
         self.adc.ctrla().modify(|_, w| w.enable().clear_bit()); // Stop ADC (No sync required)
-        unsafe {
-            I::Interrupt::disable();
-        }
         result
-    }
-
-    pub fn read_ptat_blocking(&mut self) -> u16 {
-        self.read_blocking(0x19)
-    }
-
-    pub fn read_ctat_blocking(&mut self) -> u16 {
-        self.read_blocking(0x1A)
     }
 }
 
