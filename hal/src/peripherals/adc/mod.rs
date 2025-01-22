@@ -42,6 +42,7 @@ pub use adc0::ctrlb::Resselselect as Resolution;
 pub use adc0::refctrl::Refselselect as Reference;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
     /// Clock too fast.
     ///
