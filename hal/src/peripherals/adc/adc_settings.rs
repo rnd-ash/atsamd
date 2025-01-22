@@ -46,19 +46,25 @@ pub enum AdcDivider {
 
 /// # ADC sampling rate settings
 ///
-/// Multiple factors can affect the ADCs overall sampling rate, and this structure
-/// allows for the configuring of the majority of factors that affect the sample rate of the ADC
+/// Multiple factors can affect the ADCs overall sampling rate, and this
+/// structure allows for the configuring of the majority of factors that affect
+/// the sample rate of the ADC
 ///
-/// To begin with, the ADC Clock is driven by the peripheral clock divided with a divider ([AdcDivider]).
+/// To begin with, the ADC Clock is driven by the peripheral clock divided with
+/// a divider ([AdcDivider]).
 ///
-/// Each sample is read by the ADC over [AdcSettingsBuilder::sample_clock_cycles] clock cycles, and then
-/// transmitted to the ADC register over [AdcSettingsBuilder::bit_width] clock cycles (1 clock cycle per bit)
+/// Each sample is read by the ADC over
+/// [AdcSettingsBuilder::sample_clock_cycles] clock cycles, and then transmitted
+/// to the ADC register over [AdcSettingsBuilder::bit_width] clock cycles (1
+/// clock cycle per bit)
 ///
-/// The ADC can also be configured to combine multiple simultaneous readings in either an average or summed mode
-/// (See [AdcAccumulation]), this also affects the overall sample rate of the ADC as the ADC has to do multiple
+/// The ADC can also be configured to combine multiple simultaneous readings in
+/// either an average or summed mode (See [AdcAccumulation]), this also affects
+/// the overall sample rate of the ADC as the ADC has to do multiple
 /// samples before a result is ready.
 ///
-/// Therefore, the overall formula for calculating Sample rate (SPS) can be calculated like so:
+/// Therefore, the overall formula for calculating Sample rate (SPS) can be
+/// calculated like so:
 ///
 /// ## For single sample
 /// ```
@@ -77,12 +83,12 @@ pub struct AdcSettingsBuilder {
 
 impl AdcSettingsBuilder {
     ///
-    /// Configure the ADC to sample at 250_000 SPS (Assuming the clock source is 48_000_000) using the following settings:
+    /// Configure the ADC to sample at 250_000 SPS (Assuming the clock source is
+    /// 48_000_000) using the following settings:
     /// * clock divider factor of 32
     /// * 5 clock cycles per sample
     /// * 12bit sampling
     /// * Single accumulation (No averaging or summing)
-    ///
     pub fn new() -> Self {
         Self {
             clk_divider: AdcDivider::Div32,
@@ -93,11 +99,11 @@ impl AdcSettingsBuilder {
     }
 
     ///
-    /// This setting adjusts the ADC clock frequency by dividing the input clock for the ADC.
+    /// This setting adjusts the ADC clock frequency by dividing the input clock
+    /// for the ADC.
     ///
     /// ## Example:
     /// * Input clock 48MHz, div 32 => ADC Clock is 1.5MHz
-    ///
     pub fn clock_divider(mut self, div: AdcDivider) -> Self {
         self.clk_divider = div;
         self
@@ -109,30 +115,34 @@ impl AdcSettingsBuilder {
         self
     }
 
-    /// Sets how the ADC will accumulate values before actually returning a value.
+    /// Sets how the ADC will accumulate values before actually returning a
+    /// value.
     ///
-    /// The default is single (ADC will return a sample as soon as it is measured)
+    /// The default is single (ADC will return a sample as soon as it is
+    /// measured)
     ///
-    /// Setting [AdcAccumulation::Summed] will make the ADC take 'n' samples, and sum the
-    /// total before returning it
+    /// Setting [AdcAccumulation::Summed] will make the ADC take 'n' samples,
+    /// and sum the total before returning it
     ///
-    /// Setting [AdcAccumulation::Average] will make the ADC take 'n' samples, and average the
-    /// total before returning it
+    /// Setting [AdcAccumulation::Average] will make the ADC take 'n' samples,
+    /// and average the total before returning it
     ///
-    /// NOTE: Selecting [AdcAccumulation::Summed] or [AdcAccumulation::Average] will reduce the overall
-    /// ADC sample rate by a factor of 1/n, and the returned value will be 16bits long no matter
-    /// what the sample Bit width was selected as
+    /// NOTE: Selecting [AdcAccumulation::Summed] or [AdcAccumulation::Average]
+    /// will reduce the overall ADC sample rate by a factor of 1/n, and the
+    /// returned value will be 16bits long no matter what the sample Bit
+    /// width was selected as
     pub fn accumulation_method(mut self, method: AdcAccumulation) -> Self {
         self.accumulation = method;
         self
     }
 
-    /// This adjusts the number of ADC clock cycles taken to sample a single sample.
-    /// The higher this number, the longer it will take the ADC to sample each sample.
+    /// This adjusts the number of ADC clock cycles taken to sample a single
+    /// sample. The higher this number, the longer it will take the ADC to
+    /// sample each sample.
     ///
     /// ## Safety
-    /// Internally, this function will clamp the minimum input value to 1 to avoid 0
-    ///
+    /// Internally, this function will clamp the minimum input value to 1 to
+    /// avoid 0
     pub fn clock_cycles_per_sample(mut self, num: u8) -> Self {
         self.sample_clock_cycles = 1.max(num); // Prevent 0
         self
@@ -140,7 +150,6 @@ impl AdcSettingsBuilder {
 
     ///
     /// Returns a calculated sample rate of the ADC with these settings
-    ///
     pub fn calculate_sps(&self, clock_freq: u32) -> u32 {
         let div = self.clk_divider as u32;
         let adc_clk_freq = clock_freq / div;
@@ -152,7 +161,13 @@ impl AdcSettingsBuilder {
             AdcAccumulation::Average(adc_sample_count) => adc_sample_count as u32,
             AdcAccumulation::Summed(adc_sample_count) => adc_sample_count as u32,
         };
-        clocks_per_sample *= multi as u32;
+        clocks_per_sample *= multi;
         adc_clk_freq / clocks_per_sample
+    }
+}
+
+impl Default for AdcSettingsBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
