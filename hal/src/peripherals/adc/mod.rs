@@ -547,52 +547,6 @@ impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
 }
 
 impl<I: AdcInstance, T> Adc<I, T> {
-    #[cfg(feature = "async")]
-    #[inline]
-    pub fn into_future<F>(self, _irqs: F) -> Adc<I, F>
-    where
-        F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
-    {
-        use crate::async_hal::interrupts::InterruptSource;
-        unsafe {
-            I::Interrupt::unpend();
-            I::Interrupt::enable();
-        }
-        Adc {
-            adc: self.adc,
-            _irqs: PhantomData,
-            cfg: self.cfg,
-        }
-    }
-
-    #[inline]
-    fn read_flags(&self) -> Flags {
-        let bits = self.adc.intflag().read().bits();
-        Flags::from_bits_truncate(bits)
-    }
-
-    #[inline]
-    fn clear_flags(&mut self, flags: Flags) {
-        unsafe {
-            self.adc.intflag().write(|w| w.bits(flags.bits()));
-        }
-    }
-
-    /// Check the interrupt flags, clears them and returns `Err` if an overflow
-    /// occured
-    #[inline]
-    fn check_and_clear_flags(&mut self, flags: Flags) -> Result<(), Error> {
-        // Keep a copy around so we can check for errors later
-        let flags_to_clear = flags;
-        self.clear_flags(flags_to_clear);
-
-        if flags.contains(Flags::OVERRUN) {
-            Err(Error::BufferOverrun)
-        } else {
-            Ok(())
-        }
-    }
-
     #[inline]
     fn sync(&self) {
         // Slightly more performant than checking the individual bits
