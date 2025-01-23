@@ -2,6 +2,7 @@ use crate::pac::adc0;
 
 pub use adc0::avgctrl::Samplenumselect as AdcSampleCount;
 pub use adc0::ctrlb::Resselselect as AdcResolution;
+pub use adc0::refctrl::Refselselect;
 
 /// Result accumulation strategy for the ADC
 #[derive(Copy, Clone)]
@@ -28,7 +29,10 @@ pub enum AdcDivider {
     Div256 = 256,
 }
 
-/// # ADC sampling rate settings
+#[derive(Copy, Clone)]
+pub enum VrefSource {}
+
+/// # ADC sampling settings
 ///
 /// Multiple factors can affect the ADCs overall sampling rate, and this
 /// structure allows for the configuring of the majority of factors that affect
@@ -64,22 +68,27 @@ pub struct AdcSettingsBuilder {
     pub sample_clock_cycles: u8,
     pub bit_width: AdcResolution,
     pub accumulation: AdcAccumulation,
+    pub vref: Refselselect,
 }
 
 impl AdcSettingsBuilder {
     ///
     /// Configure the ADC to sample at 250_000 SPS (Assuming the clock source is
-    /// 48_000_000) using the following settings:
+    /// 48MHz) using the following settings:
     /// * clock divider factor of 32
-    /// * 5 clock cycles per sample
+    /// * 6 clock cycles per sample
     /// * 12bit sampling
     /// * Single accumulation (No averaging or summing)
+    ///
+    /// ## Additional reading settings by default
+    /// * Use VDDANA as reference voltage for a full 0.0-3.3V reading
     pub fn new() -> Self {
         Self {
             clk_divider: AdcDivider::Div32,
-            sample_clock_cycles: 5,
+            sample_clock_cycles: 6,
             bit_width: AdcResolution::_12bit,
             accumulation: AdcAccumulation::Single,
+            vref: Refselselect::Intvcc1,
         }
     }
 
@@ -97,6 +106,11 @@ impl AdcSettingsBuilder {
     /// This setting adjusts the bit width of each ADC sample
     pub fn sample_resolution(mut self, bit_width: AdcResolution) -> Self {
         self.bit_width = bit_width;
+        self
+    }
+
+    pub fn with_vref(mut self, reference: Refselselect) -> Self {
+        self.vref = reference;
         self
     }
 

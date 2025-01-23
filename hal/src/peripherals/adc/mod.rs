@@ -58,6 +58,16 @@ pub enum Error {
     TemperatureSensorNotEnabled,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum CpuVoltageSource {
+    /// Core voltage
+    Core,
+    /// VBAT supply voltage
+    Vbat,
+    /// IO supply voltage
+    Io,
+}
+
 bitflags::bitflags! {
     #[derive(Clone, Copy)]
     pub struct Flags: u8 {
@@ -356,30 +366,43 @@ impl<I: AdcInstance> Adc<I> {
         }
 
         self.sync();
+        self.set_reference(settings.vref);
+    }
 
+    /// Converts our ADC Reading (0-n) to the range 0.0-1.0, where 1.0 = 2^(reading_bitwidth)
+    fn reading_to_f32(&self, raw: u16) -> f32 {
+        let max = match self.cfg.bit_width {
+            AdcResolution::_16bit => 65536,
+            AdcResolution::_12bit => 4096,
+            AdcResolution::_10bit => 1024,
+            AdcResolution::_8bit => 256,
+        };
+        raw as f32 / max as f32
+    }
+
+    #[inline]
+    fn set_reference(&mut self, reference: Reference) {
         self.adc
             .refctrl()
-            .modify(|_, w| w.refsel().variant(Reference::Intref));
+            .modify(|_, w| w.refsel().variant(reference));
         self.sync();
     }
 
     #[inline]
     pub fn read_blocking(&mut self, ch: u8) -> u16 {
-        self.disable_freerunning();
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
-
         self.disable_interrupts(Flags::all());
         self.mux(ch);
         self.power_up();
         self.start_conversion();
-
+        self.clear_flags(Flags::RESRDY);
+        let _discard = self.conversion_result();
         while !self.read_flags().contains(Flags::RESRDY) {
             core::hint::spin_loop();
         }
-
-        let res = self.conversion_result();
         self.power_down();
+        let res = self.conversion_result();
         res
     }
 
@@ -397,13 +420,11 @@ impl<I: AdcInstance> Adc<I> {
             while !self.read_flags().contains(Flags::RESRDY) {
                 core::hint::spin_loop();
             }
-
             *result = self.conversion_result();
             self.check_and_clear_flags(self.read_flags())?;
         }
-
         self.power_down();
-
+        self.disable_freerunning();
         Ok(())
     }
 
@@ -429,6 +450,35 @@ impl<I: AdcInstance> Adc<I> {
             tc /= div;
         }
         Ok(self.tp_tc_to_temp(tp, tc))
+    }
+
+    /// Read one of the CPU internal voltage supply, and return the value in
+    /// millivolts (Volts/1000)
+    pub fn read_internal_voltage(&mut self, src: CpuVoltageSource) -> u16 {
+        let chan = match src {
+            CpuVoltageSource::Core => 0x18,
+            CpuVoltageSource::Vbat => 0x19,
+            CpuVoltageSource::Io => 0x1A
+        };
+        // Before reading, we have to select VDDANA as our reference voltage
+        // so we get the full 3v3 range
+        if self.cfg.vref != Reference::Intvcc1 {
+            // Modify it
+            self.set_reference(Reference::Intvcc1);
+        }
+
+        let mut adc_val = self.read_blocking(chan);
+        if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
+            let div: u16 = 2u16.pow(sum as u32);
+            adc_val /= div;
+        }
+        let mut res = self.reading_to_f32(adc_val) * 3.3 * 4.0;
+
+        // Restore our settings
+        if Reference::Intvcc1 != self.cfg.vref {
+            self.set_reference(self.cfg.vref);
+        }
+        (res * 1000.0) as u16
     }
 
     /// Return the underlying ADC PAC object
@@ -533,8 +583,13 @@ impl<I: AdcInstance, T> Adc<I, T> {
 
     #[inline]
     fn start_conversion(&mut self) {
+        // The double trigger here is in case the VREF value changed between
+        // reads, this discards the conversion made just after the VREF changed,
+        // which the data sheet tells us to do in order to not get a faulty reading
+        // right after changing VREF value
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
         self.sync();
+        self.adc.swtrig().modify(|_, w| w.start().set_bit());
     }
 
     #[inline]
@@ -583,18 +638,15 @@ where
 {
     #[inline]
     pub async fn read(&mut self, ch: u8) -> u16 {
-        self.disable_freerunning();
         // Clear overrun errors that might've occured before we try to read anything
-        let _ = self.check_and_clear_flags(self.read_flags());
-
         self.mux(ch);
         self.power_up();
+        let _ = self.check_and_clear_flags(self.read_flags());
         self.start_conversion();
         // Here we explicitly ignore the result, because we know that
         // overrun errors are impossible since the ADC is configured in one-shot mode.
         let _ = self.wait_flags(Flags::RESRDY).await;
         let result = self.conversion_result();
-
         self.power_down();
         result
     }
@@ -602,11 +654,11 @@ where
     #[inline]
     pub async fn read_buffer(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
-        let _ = self.check_and_clear_flags(self.read_flags());
         self.enable_freerunning();
 
         self.mux(ch);
         self.power_up();
+        let _ = self.check_and_clear_flags(self.read_flags());
         self.start_conversion();
         for result in dst.iter_mut() {
             self.wait_flags(Flags::RESRDY).await?;
@@ -614,6 +666,7 @@ where
         }
 
         self.power_down();
+        self.disable_freerunning();
         Ok(())
     }
 
