@@ -42,6 +42,7 @@ pub use adc0::ctrlb::Resselselect as Resolution;
 pub use adc0::refctrl::Refselselect as Reference;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
     /// Clock too fast.
     ///
@@ -242,12 +243,16 @@ impl<I: AdcInstance, Id: ChId> Channel<I, Id, NoneT> {
 // These methods are only implemented for a Channel that holds a configured pin
 impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
     #[inline]
-    pub fn read_blocking(&self, adc: &mut Adc<I, NoneT>) -> u16 {
+    pub fn read_blocking<F>(&self, adc: &mut Adc<I, F>) -> u16 {
         adc.read_blocking(Id::ID)
     }
 
     #[inline]
-    pub fn read_buffer_blocking(&self, adc: &mut Adc<I>, dst: &mut [u16]) -> Result<(), Error> {
+    pub fn read_buffer_blocking<F>(
+        &self,
+        adc: &mut Adc<I, F>,
+        dst: &mut [u16],
+    ) -> Result<(), Error> {
         adc.read_buffer_blocking(Id::ID, dst)
     }
 
@@ -279,7 +284,7 @@ pub struct Adc<I: AdcInstance, F = NoneT> {
 
 pub struct AdcFuture;
 
-impl<I: AdcInstance> Adc<I> {
+impl<I: AdcInstance> Adc<I, NoneT> {
     /// Construct a new ADC instance
     ///
     /// ## Important
@@ -311,6 +316,26 @@ impl<I: AdcInstance> Adc<I> {
         Ok((new_adc, Channels::new()))
     }
 
+    #[cfg(feature = "async")]
+    #[inline]
+    pub fn into_future<F>(self, _irqs: F) -> Adc<I, F>
+    where
+        F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
+    {
+        use crate::async_hal::interrupts::InterruptSource;
+        unsafe {
+            I::Interrupt::unpend();
+            I::Interrupt::enable();
+        }
+        Adc {
+            adc: self.adc,
+            cfg: self.cfg,
+            _irqs: PhantomData,
+        }
+    }
+}
+
+impl<I: AdcInstance, F> Adc<I, F> {
     #[inline]
     pub fn configure(&mut self, settings: AdcSettingsBuilder) {
         // Reset ADC here as we cannot guarantee its state
@@ -453,7 +478,7 @@ impl<I: AdcInstance> Adc<I> {
     }
 }
 
-impl<I: AdcInstance + PrimaryAdc> Adc<I> {
+impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
     #[inline]
     fn tp_tc_to_temp(&self, tp: f32, tc: f32) -> f32 {
         let tl = calibration::tl();
@@ -493,7 +518,7 @@ impl<I: AdcInstance + PrimaryAdc> Adc<I> {
 
     /// Read one of the CPU internal voltage supply, and return the value in
     /// millivolts (Volts/1000)
-    pub fn read_internal_voltage(&mut self, src: CpuVoltageSource) -> u16 {
+    pub fn read_internal_voltage_blocking(&mut self, src: CpuVoltageSource) -> u16 {
         let chan = match src {
             CpuVoltageSource::Core => 0x18,
             CpuVoltageSource::Vbat => 0x19,
@@ -522,52 +547,6 @@ impl<I: AdcInstance + PrimaryAdc> Adc<I> {
 }
 
 impl<I: AdcInstance, T> Adc<I, T> {
-    #[cfg(feature = "async")]
-    #[inline]
-    pub fn into_future<F>(self, _irqs: F) -> Adc<I, F>
-    where
-        F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
-    {
-        use crate::async_hal::interrupts::InterruptSource;
-        unsafe {
-            I::Interrupt::unpend();
-            I::Interrupt::enable();
-        }
-        Adc {
-            adc: self.adc,
-            _irqs: PhantomData,
-            cfg: self.cfg,
-        }
-    }
-
-    #[inline]
-    fn read_flags(&self) -> Flags {
-        let bits = self.adc.intflag().read().bits();
-        Flags::from_bits_truncate(bits)
-    }
-
-    #[inline]
-    fn clear_flags(&mut self, flags: Flags) {
-        unsafe {
-            self.adc.intflag().write(|w| w.bits(flags.bits()));
-        }
-    }
-
-    /// Check the interrupt flags, clears them and returns `Err` if an overflow
-    /// occured
-    #[inline]
-    fn check_and_clear_flags(&mut self, flags: Flags) -> Result<(), Error> {
-        // Keep a copy around so we can check for errors later
-        let flags_to_clear = flags;
-        self.clear_flags(flags_to_clear);
-
-        if flags.contains(Flags::OVERRUN) {
-            Err(Error::BufferOverrun)
-        } else {
-            Ok(())
-        }
-    }
-
     #[inline]
     fn sync(&self) {
         // Slightly more performant than checking the individual bits
@@ -610,6 +589,34 @@ impl<I: AdcInstance, T> Adc<I, T> {
     fn disable_freerunning(&mut self) {
         self.adc.ctrlb().modify(|_, w| w.freerun().set_bit());
         self.sync();
+    }
+
+    #[inline]
+    fn read_flags(&self) -> Flags {
+        let bits = self.adc.intflag().read().bits();
+        Flags::from_bits_truncate(bits)
+    }
+
+    #[inline]
+    fn clear_flags(&mut self, flags: Flags) {
+        unsafe {
+            self.adc.intflag().write(|w| w.bits(flags.bits()));
+        }
+    }
+
+    /// Check the interrupt flags, clears them and returns `Err` if an overflow
+    /// occured
+    #[inline]
+    fn check_and_clear_flags(&mut self, flags: Flags) -> Result<(), Error> {
+        // Keep a copy around so we can check for errors later
+        let flags_to_clear = flags;
+        self.clear_flags(flags_to_clear);
+
+        if flags.contains(Flags::OVERRUN) {
+            Err(Error::BufferOverrun)
+        } else {
+            Ok(())
+        }
     }
 
     /// Enables an interrupt when conversion is ready.
