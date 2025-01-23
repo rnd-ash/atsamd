@@ -1,6 +1,19 @@
+use atsamd_hal_macros::hal_cfg;
+
+#[hal_cfg(any("adc-d5x"))]
 use crate::pac::adc0;
 
+#[hal_cfg(any("adc-d21", "adc-d11"))]
+use crate::pac::adc as adc0;
+
+#[hal_cfg(any("adc-d21", "adc-d11"))]
+pub use adc0::ctrlb::Prescalerselect as AdcDivider;
+
+#[hal_cfg(any("adc-d5x"))]
+use adc0::ctrla::Prescalerselect as AdcDivider;
+
 pub use adc0::avgctrl::Samplenumselect as AdcSampleCount;
+
 pub use adc0::ctrlb::Resselselect as AdcResolution;
 pub use adc0::refctrl::Refselselect;
 
@@ -15,18 +28,6 @@ pub enum AdcAccumulation {
     /// The ADC will read [AdcSampleCount] samples, sum them
     /// into a 16 bit wide value, and then the result is ready
     Summed(AdcSampleCount),
-}
-
-#[derive(Copy, Clone)]
-pub enum AdcDivider {
-    Div2 = 2,
-    Div4 = 4,
-    Div8 = 8,
-    Div16 = 16,
-    Div32 = 32,
-    Div64 = 64,
-    Div128 = 128,
-    Div256 = 256,
 }
 
 #[derive(Copy, Clone)]
