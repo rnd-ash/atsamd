@@ -1,12 +1,10 @@
 use core::{marker::PhantomData, ops::Deref};
 
 use atsamd_hal_macros::{hal_cfg, hal_module};
-use pac::dmac::channel::chctrla::Trigactselect;
-use pac::{Mclk, Peripherals};
+use pac::Peripherals;
 use seq_macro::seq;
 
 use crate::{
-    dmac::{self, sram::DmacDescriptor, AnyChannel, Beat, ReadyFuture},
     gpio::AnyPin,
     pac,
     time::Hertz,
@@ -19,6 +17,8 @@ use crate::{
 )]
 mod impls {}
 
+pub use impls::*;
+
 #[cfg(feature = "async")]
 mod async_api;
 #[cfg(feature = "async")]
@@ -29,13 +29,14 @@ pub use adc_settings::*;
 
 use super::{calibration, clock};
 
+#[hal_module(any("adc-d11", "adc-d21"))]
+use crate::pac::adc as adc0;
+#[hal_module(any("adc-d5x"))]
 use crate::pac::adc0;
 
 pub use adc0::avgctrl::Samplenumselect;
 /// Samples per reading
 pub use adc0::avgctrl::Samplenumselect as SampleRate;
-/// Clock frequency relative to the system clock
-pub use adc0::ctrla::Prescalerselect as Prescaler;
 /// Reading resolution in bits
 pub use adc0::ctrlb::Resselselect as Resolution;
 /// Reference voltage (or its source)
@@ -59,14 +60,26 @@ pub enum Error {
     TemperatureSensorNotEnabled,
 }
 
+#[hal_cfg(any("adc-d5x"))]
 #[derive(Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
 pub enum CpuVoltageSource {
     /// Core voltage
-    Core,
+    Core = 0x18,
     /// VBAT supply voltage
-    Vbat,
+    Vbat = 0x19,
     /// IO supply voltage
-    Io,
+    Io = 0x1A,
+}
+
+#[hal_cfg(any("adc-d21", "adc-d11"))]
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum CpuVoltageSource {
+    /// Core voltage
+    Core = 0x1A,
+    /// VBAT supply voltage
+    Vbat = 0x1B,
 }
 
 bitflags::bitflags! {
@@ -90,93 +103,20 @@ pub trait AdcInstance {
     type Interrupt: crate::async_hal::interrupts::InterruptSource;
 
     // The Adc0 and Adc1 PAC types implement Deref
-    type Instance: Deref<Target = pac::adc0::RegisterBlock>;
+    type Instance: Deref<Target = adc0::RegisterBlock>;
     type Clock: Into<Hertz>;
 
-    fn peripheral_reg_block(p: &mut Peripherals) -> &pac::adc0::RegisterBlock;
-    fn enable_mclk(mclk: &mut Mclk);
+    fn peripheral_reg_block(p: &mut Peripherals) -> &adc0::RegisterBlock;
+
+    #[hal_module(any("adc-d5x"))]
+    fn enable_mclk(mclk: &mut pac::Mclk);
+    #[hal_module(any("adc-d11", "adc-d21"))]
+    fn enable_pm(pm: &mut pac::Pm);
+
     fn calibrate(instance: &Self::Instance);
 
     #[cfg(feature = "async")]
     fn waker() -> &'static embassy_sync::waitqueue::AtomicWaker;
-}
-
-// TODO: The next few lines will need to be adjusted for SAMD11 and SAMD21: they
-// only have 1 ADC
-pub struct Adc0 {
-    _adc: pac::Adc0,
-}
-
-impl PrimaryAdc for Adc0 {}
-
-impl AdcInstance for Adc0 {
-    type Instance = pac::Adc0;
-    type Clock = clock::Adc0Clock;
-
-    #[cfg(feature = "async")]
-    type Interrupt = crate::async_hal::interrupts::ADC0;
-
-    #[inline]
-    fn peripheral_reg_block(p: &mut Peripherals) -> &pac::adc0::RegisterBlock {
-        &p.adc0
-    }
-
-    #[inline]
-    fn enable_mclk(mclk: &mut Mclk) {
-        mclk.apbdmask().modify(|_, w| w.adc0_().set_bit());
-    }
-
-    #[inline]
-    fn calibrate(instance: &Self::Instance) {
-        instance.calib().write(|w| unsafe {
-            w.biascomp().bits(calibration::adc0_biascomp_scale_cal());
-            w.biasrefbuf().bits(calibration::adc0_biasref_scale_cal());
-            w.biasr2r().bits(calibration::adc0_biasr2r_scale_cal())
-        });
-    }
-
-    #[cfg(feature = "async")]
-    #[inline]
-    fn waker() -> &'static embassy_sync::waitqueue::AtomicWaker {
-        &async_api::ADC_WAKERS[0]
-    }
-}
-
-pub struct Adc1 {
-    _adc: pac::Adc1,
-}
-
-impl AdcInstance for Adc1 {
-    type Instance = pac::Adc1;
-    type Clock = clock::Adc1Clock;
-
-    #[cfg(feature = "async")]
-    type Interrupt = crate::async_hal::interrupts::ADC1;
-
-    #[inline]
-    fn peripheral_reg_block(p: &mut Peripherals) -> &pac::adc0::RegisterBlock {
-        &p.adc1
-    }
-
-    #[inline]
-    fn enable_mclk(mclk: &mut Mclk) {
-        mclk.apbdmask().modify(|_, w| w.adc1_().set_bit());
-    }
-
-    #[inline]
-    fn calibrate(instance: &Self::Instance) {
-        instance.calib().write(|w| unsafe {
-            w.biascomp().bits(calibration::adc1_biascomp_scale_cal());
-            w.biasrefbuf().bits(calibration::adc1_biasref_scale_cal());
-            w.biasr2r().bits(calibration::adc1_biasr2r_scale_cal())
-        });
-    }
-
-    #[cfg(feature = "async")]
-    #[inline]
-    fn waker() -> &'static embassy_sync::waitqueue::AtomicWaker {
-        &async_api::ADC_WAKERS[1]
-    }
 }
 
 /// Trait representing a GPIO pin which can be used as an input for an ADC
@@ -294,19 +234,43 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     ///
     /// NOTE: If you plan to run the chip above 100°C, then the maximum GCLK
     /// frequency for the ADC is restricted to 90Mhz for stable performance.
+    #[hal_cfg(any("adc-d5x"))]
     #[inline]
     pub fn new(
         adc: I::Instance,
         settings: AdcSettingsBuilder,
-        mclk: &mut Mclk,
+        mclk: &mut pac::Mclk,
         clock: I::Clock,
     ) -> Result<(Self, Channels<I>), Error> {
         if (clock.into() as Hertz).to_Hz() > 100_000_000 {
             // Clock source is too fast
             return Err(Error::ClockTooFast);
         }
-        I::enable_mclk(mclk);
 
+        I::enable_mclk(mclk);
+        let mut new_adc = Self {
+            adc,
+            _irqs: PhantomData,
+            cfg: settings.clone(),
+        };
+        new_adc.configure(settings);
+        Ok((new_adc, Channels::new()))
+    }
+
+    #[hal_cfg(any("adc-d11", "adc-d21"))]
+    #[inline]
+    pub fn new(
+        adc: I::Instance,
+        settings: AdcSettingsBuilder,
+        pm: &mut pac::Pm,
+        clock: I::Clock,
+    ) -> Result<(Self, Channels<I>), Error> {
+        if (clock.into() as Hertz).to_Hz() > 48_000_000 {
+            // Clock source is too fast
+            return Err(Error::ClockTooFast);
+        }
+
+        I::enable_pm(pm);
         let mut new_adc = Self {
             adc,
             _irqs: PhantomData,
@@ -336,70 +300,6 @@ impl<I: AdcInstance> Adc<I, NoneT> {
 }
 
 impl<I: AdcInstance, F> Adc<I, F> {
-    #[inline]
-    pub fn configure(&mut self, settings: AdcSettingsBuilder) {
-        // Reset ADC here as we cannot guarantee its state
-        // This also disables the ADC
-        self.software_reset();
-        I::calibrate(&self.adc);
-        self.sync();
-        self.adc.ctrla().modify(|_, w| match settings.clk_divider {
-            AdcDivider::Div2 => w.prescaler().div2(),
-            AdcDivider::Div4 => w.prescaler().div4(),
-            AdcDivider::Div8 => w.prescaler().div8(),
-            AdcDivider::Div16 => w.prescaler().div16(),
-            AdcDivider::Div32 => w.prescaler().div32(),
-            AdcDivider::Div64 => w.prescaler().div64(),
-            AdcDivider::Div128 => w.prescaler().div128(),
-            AdcDivider::Div256 => w.prescaler().div256(),
-        });
-        self.sync();
-        self.adc
-            .ctrlb()
-            .modify(|_, w| w.ressel().variant(settings.bit_width));
-        self.sync();
-
-        self.adc
-            .sampctrl()
-            .modify(|_, w| unsafe { w.samplen().bits(settings.sample_clock_cycles) }); // sample length
-        self.sync();
-        self.adc.inputctrl().modify(|_, w| w.muxneg().gnd()); // No negative input (internal gnd)
-        self.sync();
-
-        match settings.accumulation {
-            AdcAccumulation::Single => {
-                // 1 sample to be used as is
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(Samplenumselect::_1);
-                    unsafe { w.adjres().bits(0) }
-                });
-            }
-            AdcAccumulation::Average(adc_sample_count) => {
-                // A total of `adc_sample_count` elements will be averaged by the ADC
-                // before it returns the result
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(adc_sample_count);
-                    unsafe {
-                        // Table 45-3 SAME51 datasheet
-                        w.adjres()
-                            .bits(core::cmp::min(adc_sample_count as u8, 0x04))
-                    }
-                });
-            }
-            AdcAccumulation::Summed(adc_sample_count) => {
-                // A total of `adc_sample_count` elements will be summed by the ADC
-                // before it returns the result
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(adc_sample_count);
-                    unsafe { w.adjres().bits(0) }
-                });
-            }
-        }
-
-        self.sync();
-        self.set_reference(settings.vref);
-    }
-
     /// Converts our ADC Reading (0-n) to the range 0.0-1.0, where 1.0 = 2^(reading_bitwidth)
     fn reading_to_f32(&self, raw: u16) -> f32 {
         let max = match self.cfg.bit_width {
@@ -479,51 +379,10 @@ impl<I: AdcInstance, F> Adc<I, F> {
 }
 
 impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
-    #[inline]
-    fn tp_tc_to_temp(&self, tp: f32, tc: f32) -> f32 {
-        let tl = calibration::tl();
-        let th = calibration::th();
-        let vpl = calibration::vpl() as f32;
-        let vph = calibration::vph() as f32;
-        let vcl = calibration::vcl() as f32;
-        let vch = calibration::vch() as f32;
-
-        (tl * vph * tc - vpl * th * tc - tl * vch * tp + th * vcl * tp)
-            / (vcl * tp - vch * tp - vpl * tc + vph * tc)
-    }
-
-    #[inline]
-    /// Returns the CPU temperature in degrees C
-    ///
-    /// This requires that the [pac::Supc] peripheral is configured with
-    /// tsen and ondemand bits enabled, otherwise this function will return
-    /// [Error::TemperatureSensorNotEnabled]
-    pub fn read_cpu_temperature_blocking(&mut self, supc: &pac::Supc) -> Result<f32, Error> {
-        let vref = supc.vref().read();
-        if vref.tsen().bit_is_clear() || vref.ondemand().bit_is_clear() {
-            return Err(Error::TemperatureSensorNotEnabled);
-        }
-        let mut tp = self.read_blocking(0x1C) as f32;
-        let mut tc = self.read_blocking(0x1D) as f32;
-
-        if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
-            // to prevent incorrect readings, divide by number of samples if the
-            // ADC was already configured in summation mode
-            let div: f32 = (2u16.pow(sum as u32)) as f32;
-            tp /= div;
-            tc /= div;
-        }
-        Ok(self.tp_tc_to_temp(tp, tc))
-    }
-
     /// Read one of the CPU internal voltage supply, and return the value in
     /// millivolts (Volts/1000)
     pub fn read_internal_voltage_blocking(&mut self, src: CpuVoltageSource) -> u16 {
-        let chan = match src {
-            CpuVoltageSource::Core => 0x18,
-            CpuVoltageSource::Vbat => 0x19,
-            CpuVoltageSource::Io => 0x1A,
-        };
+        let chan = src as u8;
         // Before reading, we have to select VDDANA as our reference voltage
         // so we get the full 3v3 range
         if self.cfg.vref != Reference::Intvcc1 {
@@ -543,106 +402,6 @@ impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
             self.set_reference(self.cfg.vref);
         }
         (res * 1000.0) as u16
-    }
-}
-
-impl<I: AdcInstance, T> Adc<I, T> {
-    #[inline]
-    fn sync(&self) {
-        // Slightly more performant than checking the individual bits
-        // since we avoid an extra instruction to bit shift
-        while self.adc.syncbusy().read().bits() != 0 {
-            core::hint::spin_loop();
-        }
-    }
-
-    #[inline]
-    fn power_up(&mut self) {
-        self.adc.ctrla().modify(|_, w| w.enable().set_bit());
-        self.sync();
-    }
-
-    #[inline]
-    fn power_down(&mut self) {
-        self.adc.ctrla().modify(|_, w| w.enable().clear_bit());
-        self.sync();
-    }
-
-    #[inline]
-    fn start_conversion(&mut self) {
-        // The double trigger here is in case the VREF value changed between
-        // reads, this discards the conversion made just after the VREF changed,
-        // which the data sheet tells us to do in order to not get a faulty reading
-        // right after changing VREF value
-        self.adc.swtrig().modify(|_, w| w.start().set_bit());
-        self.sync();
-        self.adc.swtrig().modify(|_, w| w.start().set_bit());
-    }
-
-    #[inline]
-    fn enable_freerunning(&mut self) {
-        self.adc.ctrlb().modify(|_, w| w.freerun().set_bit());
-        self.sync();
-    }
-
-    #[inline]
-    fn disable_freerunning(&mut self) {
-        self.adc.ctrlb().modify(|_, w| w.freerun().set_bit());
-        self.sync();
-    }
-
-    #[inline]
-    fn read_flags(&self) -> Flags {
-        let bits = self.adc.intflag().read().bits();
-        Flags::from_bits_truncate(bits)
-    }
-
-    #[inline]
-    fn clear_flags(&mut self, flags: Flags) {
-        unsafe {
-            self.adc.intflag().write(|w| w.bits(flags.bits()));
-        }
-    }
-
-    /// Check the interrupt flags, clears them and returns `Err` if an overflow
-    /// occured
-    #[inline]
-    fn check_and_clear_flags(&mut self, flags: Flags) -> Result<(), Error> {
-        // Keep a copy around so we can check for errors later
-        let flags_to_clear = flags;
-        self.clear_flags(flags_to_clear);
-
-        if flags.contains(Flags::OVERRUN) {
-            Err(Error::BufferOverrun)
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Enables an interrupt when conversion is ready.
-    #[inline]
-    #[allow(dead_code)]
-    fn enable_interrupts(&mut self, flags: Flags) {
-        unsafe { self.adc.intenset().write(|w| w.bits(flags.bits())) };
-    }
-
-    /// Disables the interrupt for when conversion is ready.
-    #[inline]
-    fn disable_interrupts(&mut self, flags: Flags) {
-        unsafe { self.adc.intenclr().write(|w| w.bits(flags.bits())) };
-    }
-
-    #[inline]
-    fn conversion_result(&self) -> u16 {
-        self.adc.result().read().result().bits()
-    }
-
-    #[inline]
-    fn mux(&mut self, ch: u8) {
-        self.adc
-            .inputctrl()
-            .modify(|_, w| unsafe { w.muxpos().bits(ch) });
-        self.sync()
     }
 }
 
@@ -692,6 +451,13 @@ where
 macro_rules! with_num_channels {
     ($some_macro:ident) => {
         $some_macro! {16}
+    };
+}
+
+#[hal_cfg(any("adc-d11", "adc-d21"))]
+macro_rules! with_num_channels {
+    ($some_macro:ident) => {
+        $some_macro! {20}
     };
 }
 
