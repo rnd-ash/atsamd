@@ -80,6 +80,9 @@ bitflags::bitflags! {
     }
 }
 
+/// Marker for which ADC has access to the CPUs internal sensors
+pub trait PrimaryAdc {}
+
 /// Trait representing an ADC instance
 pub trait AdcInstance {
     #[cfg(feature = "async")]
@@ -102,6 +105,9 @@ pub trait AdcInstance {
 pub struct Adc0 {
     _adc: pac::Adc0,
 }
+
+impl PrimaryAdc for Adc0 {}
+
 impl AdcInstance for Adc0 {
     type Instance = pac::Adc0;
     type Clock = clock::Adc0Clock;
@@ -428,6 +434,39 @@ impl<I: AdcInstance> Adc<I> {
         Ok(())
     }
 
+    /// Return the underlying ADC PAC object
+    ///
+    /// You must also return all channels to the ADC to free its resources.
+    #[inline]
+    pub fn free(mut self, _channels: Channels<I>) -> I::Instance {
+        self.software_reset();
+        self.adc
+    }
+
+    /// Reset the peripheral.
+    ///
+    /// This also disables the ADC.
+    #[inline]
+    fn software_reset(&mut self) {
+        self.adc.ctrla().modify(|_, w| w.swrst().set_bit());
+        self.sync();
+    }
+}
+
+impl<I: AdcInstance + PrimaryAdc> Adc<I> {
+    #[inline]
+    fn tp_tc_to_temp(&self, tp: f32, tc: f32) -> f32 {
+        let tl = calibration::tl();
+        let th = calibration::th();
+        let vpl = calibration::vpl() as f32;
+        let vph = calibration::vph() as f32;
+        let vcl = calibration::vcl() as f32;
+        let vch = calibration::vch() as f32;
+
+        (tl * vph * tc - vpl * th * tc - tl * vch * tp + th * vcl * tp)
+            / (vcl * tp - vch * tp - vpl * tc + vph * tc)
+    }
+
     #[inline]
     /// Returns the CPU temperature in degrees C
     ///
@@ -458,7 +497,7 @@ impl<I: AdcInstance> Adc<I> {
         let chan = match src {
             CpuVoltageSource::Core => 0x18,
             CpuVoltageSource::Vbat => 0x19,
-            CpuVoltageSource::Io => 0x1A
+            CpuVoltageSource::Io => 0x1A,
         };
         // Before reading, we have to select VDDANA as our reference voltage
         // so we get the full 3v3 range
@@ -479,24 +518,6 @@ impl<I: AdcInstance> Adc<I> {
             self.set_reference(self.cfg.vref);
         }
         (res * 1000.0) as u16
-    }
-
-    /// Return the underlying ADC PAC object
-    ///
-    /// You must also return all channels to the ADC to free its resources.
-    #[inline]
-    pub fn free(mut self, _channels: Channels<I>) -> I::Instance {
-        self.software_reset();
-        self.adc
-    }
-
-    /// Reset the peripheral.
-    ///
-    /// This also disables the ADC.
-    #[inline]
-    fn software_reset(&mut self) {
-        self.adc.ctrla().modify(|_, w| w.swrst().set_bit());
-        self.sync();
     }
 }
 
@@ -545,19 +566,6 @@ impl<I: AdcInstance, T> Adc<I, T> {
         } else {
             Ok(())
         }
-    }
-
-    #[inline]
-    fn tp_tc_to_temp(&self, tp: f32, tc: f32) -> f32 {
-        let tl = calibration::tl();
-        let th = calibration::th();
-        let vpl = calibration::vpl() as f32;
-        let vph = calibration::vph() as f32;
-        let vcl = calibration::vcl() as f32;
-        let vch = calibration::vch() as f32;
-
-        (tl * vph * tc - vpl * th * tc - tl * vch * tp + th * vcl * tp)
-            / (vcl * tp - vch * tp - vpl * tc + vph * tc)
     }
 
     #[inline]
@@ -668,25 +676,6 @@ where
         self.power_down();
         self.disable_freerunning();
         Ok(())
-    }
-
-    #[inline]
-    pub async fn read_cpu_temperature(&mut self, supc: &pac::Supc) -> Result<f32, Error> {
-        let vref = supc.vref().read();
-        if vref.tsen().bit_is_clear() || vref.ondemand().bit_is_clear() {
-            return Err(Error::TemperatureSensorNotEnabled);
-        }
-        let mut tp = self.read(0x1C).await as f32;
-        let mut tc = self.read(0x1D).await as f32;
-
-        if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
-            // to prevent incorrect readings, divide by number of samples if the
-            // ADC was already configured in summation mode
-            let div: f32 = (2u16.pow(sum as u32)) as f32;
-            tp /= div;
-            tc /= div;
-        }
-        Ok(self.tp_tc_to_temp(tp, tc))
     }
 }
 
