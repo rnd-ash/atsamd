@@ -50,6 +50,12 @@ pub enum Error {
     ClockTooFast,
     /// Buffer overflowed
     BufferOverrun,
+    /// Temperature sensor not enabled
+    ///
+    /// This is returned when attempting to read the CPU temperature, and
+    /// the SUPC peripheral has not been configured correctly to expose
+    /// the temperature sensors.
+    TemperatureSensorNotEnabled,
 }
 
 bitflags::bitflags! {
@@ -252,6 +258,7 @@ impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
 pub struct Adc<I: AdcInstance, F = NoneT> {
     adc: I::Instance,
     _irqs: PhantomData<F>,
+    cfg: AdcSettingsBuilder,
 }
 
 pub struct AdcFuture;
@@ -282,6 +289,7 @@ impl<I: AdcInstance> Adc<I> {
         let mut new_adc = Self {
             adc,
             _irqs: PhantomData,
+            cfg: settings.clone(),
         };
         new_adc.configure(settings);
         Ok((new_adc, Channels::new()))
@@ -400,13 +408,27 @@ impl<I: AdcInstance> Adc<I> {
     }
 
     #[inline]
-    pub fn read_ptat_blocking(&mut self) -> u16 {
-        self.read_blocking(0x19)
-    }
+    /// Returns the CPU temperature in degrees C
+    ///
+    /// This requires that the [pac::Supc] peripheral is configured with
+    /// tsen and ondemand bits enabled, otherwise this function will return
+    /// [Error::TemperatureSensorNotEnabled]
+    pub fn read_cpu_temperature_blocking(&mut self, supc: &pac::Supc) -> Result<f32, Error> {
+        let vref = supc.vref().read();
+        if vref.tsen().bit_is_clear() || vref.ondemand().bit_is_clear() {
+            return Err(Error::TemperatureSensorNotEnabled);
+        }
+        let mut tp = self.read_blocking(0x1C) as f32;
+        let mut tc = self.read_blocking(0x1D) as f32;
 
-    #[inline]
-    pub fn read_ctat_blocking(&mut self) -> u16 {
-        self.read_blocking(0x1A)
+        if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
+            // to prevent incorrect readings, divide by number of samples if the
+            // ADC was already configured in summation mode
+            let div: f32 = (2u16.pow(sum as u32)) as f32;
+            tp /= div;
+            tc /= div;
+        }
+        Ok(self.tp_tc_to_temp(tp, tc))
     }
 
     /// Return the underlying ADC PAC object
@@ -443,6 +465,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
         Adc {
             adc: self.adc,
             _irqs: PhantomData,
+            cfg: self.cfg,
         }
     }
 
@@ -472,6 +495,19 @@ impl<I: AdcInstance, T> Adc<I, T> {
         } else {
             Ok(())
         }
+    }
+
+    #[inline]
+    fn tp_tc_to_temp(&self, tp: f32, tc: f32) -> f32 {
+        let tl = calibration::tl();
+        let th = calibration::th();
+        let vpl = calibration::vpl() as f32;
+        let vph = calibration::vph() as f32;
+        let vcl = calibration::vcl() as f32;
+        let vch = calibration::vch() as f32;
+
+        (tl * vph * tc - vpl * th * tc - tl * vch * tp + th * vcl * tp)
+            / (vcl * tp - vch * tp - vpl * tc + vph * tc)
     }
 
     #[inline]
@@ -579,6 +615,25 @@ where
 
         self.power_down();
         Ok(())
+    }
+
+    #[inline]
+    pub async fn read_cpu_temperature(&mut self, supc: &pac::Supc) -> Result<f32, Error> {
+        let vref = supc.vref().read();
+        if vref.tsen().bit_is_clear() || vref.ondemand().bit_is_clear() {
+            return Err(Error::TemperatureSensorNotEnabled);
+        }
+        let mut tp = self.read(0x1C).await as f32;
+        let mut tc = self.read(0x1D).await as f32;
+
+        if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
+            // to prevent incorrect readings, divide by number of samples if the
+            // ADC was already configured in summation mode
+            let div: f32 = (2u16.pow(sum as u32)) as f32;
+            tp /= div;
+            tc /= div;
+        }
+        Ok(self.tp_tc_to_temp(tp, tc))
     }
 }
 
