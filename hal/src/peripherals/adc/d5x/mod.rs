@@ -3,7 +3,7 @@ pub mod pin;
 use atsamd_hal_macros::hal_cfg;
 use pac::adc0::avgctrl::Samplenumselect;
 
-use super::{async_api, Adc, AdcAccumulation, AdcSettingsBuilder, Error, Flags};
+use super::{async_api, Adc, AdcAccumulation, Config, Error, Flags};
 use super::{AdcInstance, PrimaryAdc};
 use crate::typelevel::NoneT;
 use crate::{calibration, pac};
@@ -87,7 +87,7 @@ impl AdcInstance for Adc1 {
 
 impl<I: AdcInstance> Adc<I, NoneT> {
     #[inline]
-    pub fn configure(&mut self, settings: AdcSettingsBuilder) {
+    pub fn configure(&mut self, config: Config) {
         // Reset ADC here as we cannot guarantee its state
         // This also disables the ADC
         self.software_reset();
@@ -95,21 +95,21 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         self.sync();
         self.adc
             .ctrla()
-            .modify(|_, w| w.prescaler().variant(settings.clk_divider));
+            .modify(|_, w| w.prescaler().variant(config.clk_divider));
         self.sync();
         self.adc
             .ctrlb()
-            .modify(|_, w| w.ressel().variant(settings.bit_width));
+            .modify(|_, w| w.ressel().variant(config.bit_width));
         self.sync();
 
         self.adc
             .sampctrl()
-            .modify(|_, w| unsafe { w.samplen().bits(settings.sample_clock_cycles) }); // sample length
+            .modify(|_, w| unsafe { w.samplen().bits(config.sample_clock_cycles) }); // sample length
         self.sync();
         self.adc.inputctrl().modify(|_, w| w.muxneg().gnd()); // No negative input (internal gnd)
         self.sync();
 
-        match settings.accumulation {
+        match config.accumulation {
             AdcAccumulation::Single => {
                 // 1 sample to be used as is
                 self.adc.avgctrl().modify(|_, w| {
@@ -140,7 +140,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         }
 
         self.sync();
-        self.set_reference(settings.vref);
+        self.set_reference(config.vref);
     }
 }
 
