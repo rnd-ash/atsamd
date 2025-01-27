@@ -4,6 +4,8 @@ use super::{Adc, AdcAccumulation, AdcDivider, AdcInstance, Config, Error, Flags,
 
 use crate::pac;
 use pac::adc::avgctrl::Samplenumselect;
+use pac::adc::ctrlb::Resselselect;
+use pac::adc::inputctrl::Gainselect;
 use pac::Peripherals;
 pub mod pin;
 
@@ -62,7 +64,10 @@ impl<I: AdcInstance> Adc<I, NoneT> {
             .sampctrl()
             .modify(|_, w| unsafe { w.samplen().bits(config.sample_clock_cycles) }); // sample length
         self.sync();
-        self.adc.inputctrl().modify(|_, w| w.muxneg().gnd()); // No negative input (internal gnd)
+        self.adc.inputctrl().modify(|_, w| {
+            w.muxneg().gnd();
+            w.gain().variant(Gainselect::Div2)
+        }); // No negative input (internal gnd)
         self.sync();
 
         match config.accumulation {
