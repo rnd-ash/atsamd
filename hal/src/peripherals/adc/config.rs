@@ -33,7 +33,7 @@ pub enum AdcAccumulation {
 #[derive(Copy, Clone)]
 pub enum VrefSource {}
 
-/// # ADC sampling settings
+/// # ADC configuration builder
 ///
 /// Multiple factors can affect the ADCs overall sampling rate, and this
 /// structure allows for the configuring of the majority of factors that affect
@@ -64,7 +64,7 @@ pub enum VrefSource {}
 /// SPS = (GCLK_ADC / clk_divider) / (n * (sample_clock_cycles + bit_width))
 /// ```
 #[derive(Copy, Clone)]
-pub struct AdcSettingsBuilder {
+pub struct Config {
     pub clk_divider: AdcDivider,
     pub sample_clock_cycles: u8,
     pub bit_width: AdcResolution,
@@ -72,7 +72,7 @@ pub struct AdcSettingsBuilder {
     pub vref: Refselselect,
 }
 
-impl AdcSettingsBuilder {
+impl Config {
     ///
     /// Configure the ADC to sample at 250_000 SPS (Assuming the clock source is
     /// 48MHz) using the following settings:
@@ -166,7 +166,7 @@ impl AdcSettingsBuilder {
     }
 }
 
-impl Default for AdcSettingsBuilder {
+impl Default for Config {
     fn default() -> Self {
         Self::new()
     }

@@ -24,14 +24,12 @@ mod async_api;
 #[cfg(feature = "async")]
 pub use async_api::*;
 
-mod adc_settings;
-pub use adc_settings::*;
+mod config;
+pub use config::*;
 
-use super::{calibration, clock};
-
-#[hal_module(any("adc-d11", "adc-d21"))]
+#[hal_cfg(any("adc-d11", "adc-d21"))]
 use crate::pac::adc as adc0;
-#[hal_module(any("adc-d5x"))]
+#[hal_cfg(any("adc-d5x"))]
 use crate::pac::adc0;
 
 pub use adc0::avgctrl::Samplenumselect;
@@ -108,9 +106,10 @@ pub trait AdcInstance {
 
     fn peripheral_reg_block(p: &mut Peripherals) -> &adc0::RegisterBlock;
 
-    #[hal_module(any("adc-d5x"))]
+    #[hal_cfg(any("adc-d5x"))]
     fn enable_mclk(mclk: &mut pac::Mclk);
-    #[hal_module(any("adc-d11", "adc-d21"))]
+
+    #[hal_cfg(any("adc-d11", "adc-d21"))]
     fn enable_pm(pm: &mut pac::Pm);
 
     fn calibrate(instance: &Self::Instance);
@@ -219,7 +218,7 @@ impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
 pub struct Adc<I: AdcInstance, F = NoneT> {
     adc: I::Instance,
     _irqs: PhantomData<F>,
-    cfg: AdcSettingsBuilder,
+    cfg: Config,
 }
 
 pub struct AdcFuture;
@@ -238,7 +237,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     #[inline]
     pub fn new(
         adc: I::Instance,
-        settings: AdcSettingsBuilder,
+        config: Config,
         mclk: &mut pac::Mclk,
         clock: I::Clock,
     ) -> Result<(Self, Channels<I>), Error> {
@@ -251,9 +250,9 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         let mut new_adc = Self {
             adc,
             _irqs: PhantomData,
-            cfg: settings.clone(),
+            cfg: config.clone(),
         };
-        new_adc.configure(settings);
+        new_adc.configure(config);
         Ok((new_adc, Channels::new()))
     }
 
@@ -261,7 +260,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     #[inline]
     pub fn new(
         adc: I::Instance,
-        settings: AdcSettingsBuilder,
+        config: Config,
         pm: &mut pac::Pm,
         clock: I::Clock,
     ) -> Result<(Self, Channels<I>), Error> {
@@ -274,9 +273,9 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         let mut new_adc = Self {
             adc,
             _irqs: PhantomData,
-            cfg: settings.clone(),
+            cfg: config.clone(),
         };
-        new_adc.configure(settings);
+        new_adc.configure(config);
         Ok((new_adc, Channels::new()))
     }
 
@@ -300,7 +299,8 @@ impl<I: AdcInstance> Adc<I, NoneT> {
 }
 
 impl<I: AdcInstance, F> Adc<I, F> {
-    /// Converts our ADC Reading (0-n) to the range 0.0-1.0, where 1.0 = 2^(reading_bitwidth)
+    /// Converts our ADC Reading (0-n) to the range 0.0-1.0, where 1.0 =
+    /// 2^(reading_bitwidth)
     fn reading_to_f32(&self, raw: u16) -> f32 {
         let max = match self.cfg.bit_width {
             AdcResolution::_16bit => 65536,
