@@ -56,6 +56,11 @@ pub enum Error {
     /// the SUPC peripheral has not been configured correctly to expose
     /// the temperature sensors.
     TemperatureSensorNotEnabled,
+    /// Invalid ADC Setting sample bit width
+    ///
+    /// This can happen if you are trying to average/sum ADC values,
+    /// and did not select 16bit bitwidth for ADC outputs
+    InvalidSampleBitWidth,
 }
 
 #[hal_cfg(any("adc-d5x"))]
@@ -252,7 +257,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
             _irqs: PhantomData,
             cfg: config.clone(),
         };
-        new_adc.configure(config);
+        new_adc.configure(config)?;
         Ok((new_adc, Channels::new()))
     }
 
@@ -275,7 +280,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
             _irqs: PhantomData,
             cfg: config.clone(),
         };
-        new_adc.configure(config);
+        new_adc.configure(config)?;
         Ok((new_adc, Channels::new()))
     }
 
@@ -299,8 +304,8 @@ impl<I: AdcInstance> Adc<I, NoneT> {
 }
 
 impl<I: AdcInstance, F> Adc<I, F> {
-    /// Converts our ADC Reading (0-n) to the range 0.0-1.0, where 1.0 =
-    /// 2^(reading_bitwidth)
+    /// Converts our ADC Reading (0-n) to the range 0.0-1.0, where
+    /// 1.0 = 2^(reading_bitwidth)
     fn reading_to_f32(&self, raw: u16) -> f32 {
         let max = match self.cfg.bit_width {
             AdcResolution::_16bit => 65536,
@@ -395,7 +400,7 @@ impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
             let div: u16 = 2u16.pow(sum as u32);
             adc_val /= div;
         }
-        let mut res = self.reading_to_f32(adc_val) * 3.3 * 4.0;
+        let res = self.reading_to_f32(adc_val) * 3.3 * 4.0;
 
         // Restore our settings
         if Reference::Intvcc1 != self.cfg.vref {
