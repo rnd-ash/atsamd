@@ -18,7 +18,7 @@ pub use adc0::ctrlb::Resselselect as AdcResolution;
 pub use adc0::refctrl::Refselselect;
 
 /// Result accumulation strategy for the ADC
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum AdcAccumulation {
     /// The ADC will read once and then the result is ready
     Single,

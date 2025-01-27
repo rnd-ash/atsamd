@@ -45,7 +45,7 @@ impl AdcInstance for Adc0 {
 
 impl<I: AdcInstance> Adc<I, NoneT> {
     #[inline]
-    pub fn configure(&mut self, config: Config) {
+    pub fn configure(&mut self, config: Config) -> Result<(), super::Error> {
         // Reset ADC here as we cannot guarantee its state
         // This also disables the ADC
         self.software_reset();
@@ -70,6 +70,12 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         }); // No negative input (internal gnd)
         self.sync();
 
+        // Check bit width selected
+        if config.accumulation != AdcAccumulation::Single
+            && config.bit_width != Resselselect::_16bit
+        {
+            return Err(super::Error::InvalidSampleBitWidth);
+        }
         match config.accumulation {
             AdcAccumulation::Single => {
                 // 1 sample to be used as is
@@ -102,6 +108,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
 
         self.sync();
         self.set_reference(config.vref);
+        Ok(())
     }
 }
 
