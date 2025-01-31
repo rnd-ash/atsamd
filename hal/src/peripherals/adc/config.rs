@@ -1,6 +1,6 @@
 use atsamd_hal_macros::hal_cfg;
 
-#[hal_cfg(any("adc-d5x"))]
+#[hal_cfg("adc-d5x")]
 use crate::pac::adc0;
 
 #[hal_cfg(any("adc-d21", "adc-d11"))]
@@ -9,8 +9,8 @@ use crate::pac::adc as adc0;
 #[hal_cfg(any("adc-d21", "adc-d11"))]
 pub use adc0::ctrlb::Prescalerselect as AdcDivider;
 
-#[hal_cfg(any("adc-d5x"))]
-use adc0::ctrla::Prescalerselect as AdcDivider;
+#[hal_cfg("adc-d5x")]
+pub use adc0::ctrla::Prescalerselect as AdcDivider;
 
 pub use adc0::avgctrl::Samplenumselect as AdcSampleCount;
 
@@ -29,9 +29,6 @@ pub enum AdcAccumulation {
     /// into a 16 bit wide value, and then the result is ready
     Summed(AdcSampleCount),
 }
-
-#[derive(Copy, Clone)]
-pub enum VrefSource {}
 
 /// # ADC configuration builder
 ///
