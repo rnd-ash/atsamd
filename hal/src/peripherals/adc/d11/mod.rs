@@ -1,6 +1,6 @@
-use crate::{calibration, typelevel::NoneT};
+use crate::typelevel::NoneT;
 
-use super::{Adc, AdcAccumulation, AdcDivider, AdcInstance, Config, Error, Flags, PrimaryAdc};
+use super::{Adc, AdcAccumulation, AdcInstance, Config, Error, Flags, PrimaryAdc};
 
 use crate::pac;
 use pac::adc::avgctrl::Samplenumselect;
@@ -33,7 +33,7 @@ impl AdcInstance for Adc0 {
     }
 
     #[inline]
-    fn calibrate(instance: &Self::Instance) {}
+    fn calibrate(_instance: &Self::Instance) {}
 
     #[cfg(feature = "async")]
     #[inline]
