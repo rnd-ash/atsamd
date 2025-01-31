@@ -45,8 +45,15 @@ pub use adc0::refctrl::Refselselect as Reference;
 pub enum Error {
     /// Clock too fast.
     ///
-    /// The ADC requires that it's fed a GCLK running at MAXIMUM 100 MHz
-    /// (SAMDx5x). Above 100°C, the GCLK must run at or below 90 MHz.
+    /// The ADC requires that it's fed a GCLK that does not exceed a certain frequency.
+    /// These maximums are:
+    ///
+    /// * **SAMD/E5x** - 100Mhz
+    /// * **SAMC/D21** - 48Mhz
+    /// * **SAMD11** - 48Mhz
+    ///
+    /// SAMx51 specific: If you are running the CPU at temperatures past 100C, then
+    /// the maximum GCLK clock speed should be 90Mhz
     ClockTooFast,
     /// Buffer overflowed
     BufferOverrun,
@@ -450,8 +457,8 @@ where
     }
 }
 
-// Here I declare the number of channels for the SAME51 ADC
-// TODO: declare channels for other chip variants
+// Channel implementation
+
 #[hal_cfg(any("adc-d5x"))]
 macro_rules! with_num_channels {
     ($some_macro:ident) => {
@@ -459,10 +466,17 @@ macro_rules! with_num_channels {
     };
 }
 
-#[hal_cfg(any("adc-d11", "adc-d21"))]
+#[hal_cfg(any("adc-d21"))]
 macro_rules! with_num_channels {
     ($some_macro:ident) => {
         $some_macro! {20}
+    };
+}
+
+#[hal_cfg(any("adc-d11"))]
+macro_rules! with_num_channels {
+    ($some_macro:ident) => {
+        $some_macro! {10}
     };
 }
 
