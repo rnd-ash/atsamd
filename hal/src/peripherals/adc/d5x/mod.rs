@@ -3,7 +3,7 @@ pub mod pin;
 use pac::adc0::avgctrl::Samplenumselect;
 use pac::adc0::ctrlb::Resselselect;
 
-use super::{async_api, Adc, AdcAccumulation, Config, Error, Flags};
+use super::{Adc, AdcAccumulation, Config, Error, Flags};
 use super::{AdcInstance, PrimaryAdc};
 use crate::typelevel::NoneT;
 use crate::{calibration, pac};
@@ -81,6 +81,7 @@ impl AdcInstance for Adc1 {
     #[cfg(feature = "async")]
     #[inline]
     fn waker() -> &'static embassy_sync::waitqueue::AtomicWaker {
+        use super::async_api;
         &async_api::ADC_WAKERS[1]
     }
 }

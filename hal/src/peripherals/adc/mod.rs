@@ -29,7 +29,7 @@ pub use config::*;
 
 #[hal_cfg(any("adc-d11", "adc-d21"))]
 use crate::pac::adc as adc0;
-#[hal_cfg(any("adc-d5x"))]
+#[hal_cfg("adc-d5x")]
 use crate::pac::adc0;
 
 pub use adc0::avgctrl::Samplenumselect;
@@ -70,7 +70,7 @@ pub enum Error {
     InvalidSampleBitWidth,
 }
 
-#[hal_cfg(any("adc-d5x"))]
+#[hal_cfg("adc-d5x")]
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CpuVoltageSource {
@@ -118,7 +118,7 @@ pub trait AdcInstance {
 
     fn peripheral_reg_block(p: &mut Peripherals) -> &adc0::RegisterBlock;
 
-    #[hal_cfg(any("adc-d5x"))]
+    #[hal_cfg("adc-d5x")]
     fn enable_mclk(mclk: &mut pac::Mclk);
 
     #[hal_cfg(any("adc-d11", "adc-d21"))]
@@ -243,7 +243,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     ///
     /// NOTE: If you plan to run the chip above 100°C, then the maximum GCLK
     /// frequency for the ADC is restricted to 90Mhz for stable performance.
-    #[hal_cfg(any("adc-d5x"))]
+    #[hal_cfg("adc-d5x")]
     #[inline]
     pub fn new(
         adc: I::Instance,
@@ -456,7 +456,7 @@ where
 
 // Channel implementation
 
-#[hal_cfg(any("adc-d5x"))]
+#[hal_cfg("adc-d5x")]
 macro_rules! with_num_channels {
     ($some_macro:ident) => {
         $some_macro! {16}
