@@ -233,8 +233,6 @@ pub struct Adc<I: AdcInstance, F = NoneT> {
     cfg: Config,
 }
 
-pub struct AdcFuture;
-
 impl<I: AdcInstance> Adc<I, NoneT> {
     /// Construct a new ADC instance
     ///
@@ -262,7 +260,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         let mut new_adc = Self {
             adc,
             _irqs: PhantomData,
-            cfg: config.clone(),
+            cfg: config,
         };
         new_adc.configure(config)?;
         Ok((new_adc, Channels::new()))
@@ -285,7 +283,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         let mut new_adc = Self {
             adc,
             _irqs: PhantomData,
-            cfg: config.clone(),
+            cfg: config,
         };
         new_adc.configure(config)?;
         Ok((new_adc, Channels::new()))
@@ -345,8 +343,7 @@ impl<I: AdcInstance, F> Adc<I, F> {
             core::hint::spin_loop();
         }
         self.power_down();
-        let res = self.conversion_result();
-        res
+        self.conversion_result()
     }
 
     #[inline]
