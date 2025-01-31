@@ -25,6 +25,7 @@ macro_rules! adc_pins {
     };
 }
 
+#[hal_cfg(any("adc-d21"))]
 adc_pins! {
     #[hal_cfg("pa02")]
     PA02: (Adc0, 0),
@@ -71,5 +72,28 @@ adc_pins! {
     PA10: (Adc0, 18),
     #[hal_cfg("pa11")]
     PA11: (Adc0, 19),
+}
 
+#[hal_cfg(any("adc-d11"))]
+adc_pins! {
+    #[hal_cfg("pa02")]
+    PA02: (Adc0, 0),
+    #[hal_cfg("pa03")]
+    PA03: (Adc0, 1),
+    #[hal_cfg("pa04")]
+    PA04: (Adc0, 2),
+    #[hal_cfg("pa05")]
+    PA05: (Adc0, 3),
+    #[hal_cfg("pa06")]
+    PA06: (Adc0, 4),
+    #[hal_cfg("pa07")]
+    PA07: (Adc0, 5),
+    #[hal_cfg("pa14")]
+    PA14: (Adc0, 6),
+    #[hal_cfg("pa15")]
+    PA15: (Adc0, 7),
+    #[hal_cfg("pa10")]
+    PA10: (Adc0, 8),
+    #[hal_cfg("pa11")]
+    PA11: (Adc0, 9),
 }
