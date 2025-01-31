@@ -117,8 +117,6 @@ impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {}
 impl<I: AdcInstance, T> Adc<I, T> {
     #[inline]
     pub(super) fn sync(&self) {
-        // Slightly more performant than checking the individual bits
-        // since we avoid an extra instruction to bit shift
         while self.adc.status().read().syncbusy().bit_is_set() {
             core::hint::spin_loop();
         }
