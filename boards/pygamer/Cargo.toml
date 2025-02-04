@@ -12,11 +12,11 @@ license = "MIT OR Apache-2.0"
 name = "pygamer"
 readme = "README.md"
 repository = "https://github.com/atsamd-rs/atsamd"
-version = "0.13.1"
+version = "0.14.1"
 
 [dependencies]
 cortex-m = {version = "0.7", features = ["critical-section-single-core"]}
-embedded-hal-bus = "0.2.0"
+embedded-hal-bus = "0.3.0"
 # This version is pinned as recommended by: https://docs.rs/embedded-hal-bus/0.2.0/embedded_hal_bus/spi/struct.ExclusiveDevice.html#method.new_no_delay
 st7735-lcd = "=0.10.0"
 
@@ -27,24 +27,24 @@ version = "0.7"
 [dependencies.atsamd-hal]
 default-features = false
 path = "../../hal"
-version = "0.20.2"
+version = "0.21.0"
 
 [dependencies.usb-device]
 optional = true
 version = "0.3.2"
 
 [dependencies.ws2812-spi]
-version = "0.5.0"
 features = ["mosi_idle_high"]
 optional = true
+version = "0.5.0"
 
 [dev-dependencies]
 embedded-graphics = "0.8.1"
-embedded-sdmmc = "0.8.0"
+embedded-sdmmc = "0.8.1"
 lis3dh = "0.4.3"
 micromath = "2.1"
 panic-halt = "1"
-rtic = {version = "2.1.1", features = ["thumbv7-backend"]}
+rtic = {version = "2.1.2", features = ["thumbv7-backend"]}
 smart-leds = "0.4"
 tinybmp = "0.6"
 usbd-serial = "0.2"
@@ -54,12 +54,14 @@ usbd-serial = "0.2"
 default = ["rt", "atsamd-hal/samd51j"]
 dma = ["atsamd-hal/dma"]
 max-channels = ["dma", "atsamd-hal/max-channels"]
+neopixel-spi = ["dep:ws2812-spi"]
 panic_led = []
 rt = ["cortex-m-rt", "atsamd-hal/samd51j-rt"]
 usb = ["atsamd-hal/usb", "usb-device"]
-neopixel-spi = ["dep:ws2812-spi"]
 # Enable async support from atsamd-hal
 async = ["atsamd-hal/async"]
+# Enable rtic support from atsamd-hal
+rtic = ["atsamd-hal/rtic"]
 
 # for cargo flash
 [package.metadata]
@@ -69,6 +71,10 @@ chip = "ATSAMD51J19A"
 name = "blinky_basic"
 
 [[example]]
+name = "blinky_rtic"
+required-features = ["rtic"]
+
+[[example]]
 name = "button_rtic"
 
 [[example]]
@@ -76,25 +82,6 @@ name = "clock_out"
 
 [[example]]
 name = "ferris_img"
-
-[[example]]
-name = "pwm_tc4"
-
-[[example]]
-name = "pwm_tcc0"
-
-[[example]]
-name = "qspi"
-
-[[example]]
-name = "sd_card"
-
-[[example]]
-name = "timer"
-
-[[example]]
-name = "usb_poll"
-required-features = ["usb"]
 
 [[example]]
 name = "neopixel_adc_battery"
@@ -115,3 +102,22 @@ required-features = ["neopixel-spi"]
 [[example]]
 name = "neopixel_rainbow"
 required-features = ["neopixel-spi"]
+
+[[example]]
+name = "pwm_tc4"
+
+[[example]]
+name = "pwm_tcc0"
+
+[[example]]
+name = "qspi"
+
+[[example]]
+name = "sd_card"
+
+[[example]]
+name = "timer"
+
+[[example]]
+name = "usb_poll"
+required-features = ["usb"]

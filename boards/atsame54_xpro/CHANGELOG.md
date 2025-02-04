@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1](https://github.com/atsamd-rs/atsamd/compare/atsame54_xpro-0.11.0...atsame54_xpro-0.11.1) - 2025-01-31
+
+### Examples
+
+- Updates all Tier 1 BSP examples to use RTIC v2 and the RTC monotonic where applicable (#817)
+
+## [0.11.0](https://github.com/atsamd-rs/atsamd/compare/atsame54_xpro-0.10.1...atsame54_xpro-0.11.0) - 2025-01-13
+
+### Other
+
+- updated the following local packages: atsamd-hal
+
 ## [0.10.1](https://github.com/atsamd-rs/atsamd/compare/atsame54_xpro-0.10.0...atsame54_xpro-0.10.1) - 2024-12-11
 
 ### Other
