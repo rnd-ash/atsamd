@@ -1,13 +1,12 @@
 use core::{marker::PhantomData, ops::Deref};
 
-use atsamd_hal_macros::{hal_cfg, hal_module};
+use atsamd_hal_macros::{hal_cfg, hal_macro_helper, hal_module};
 use pac::Peripherals;
 use seq_macro::seq;
 
 use crate::{
     gpio::AnyPin,
     pac,
-    time::Hertz,
     typelevel::{NoneT, Sealed},
 };
 
@@ -45,15 +44,15 @@ pub use adc0::refctrl::Refselselect as Reference;
 pub enum Error {
     /// Clock too fast.
     ///
-    /// The ADC requires that it's fed a GCLK that does not exceed a certain frequency.
-    /// These maximums are:
+    /// The ADC requires that it's fed a GCLK that does not exceed a certain
+    /// frequency. These maximums are:
     ///
     /// * **SAMD/E5x** - 100Mhz
     /// * **SAMC/D21** - 48Mhz
     /// * **SAMD11** - 48Mhz
     ///
-    /// SAMx51 specific: If you are running the CPU at temperatures past 100C, then
-    /// the maximum GCLK clock speed should be 90Mhz
+    /// SAMx51 specific: If you are running the CPU at temperatures past 100C,
+    /// then the maximum GCLK clock speed should be 90Mhz
     ClockTooFast,
     /// Buffer overflowed
     BufferOverrun,
@@ -114,12 +113,14 @@ pub trait AdcInstance {
 
     // The Adc0 and Adc1 PAC types implement Deref
     type Instance: Deref<Target = adc0::RegisterBlock>;
-    type Clock: Into<Hertz>;
 
-    fn peripheral_reg_block(p: &mut Peripherals) -> &adc0::RegisterBlock;
+    #[hal_cfg(any("adc-d11", "adc-d21"))]
+    type Clock: Into<crate::time::Hertz>;
 
     #[hal_cfg("adc-d5x")]
-    fn enable_mclk(mclk: &mut pac::Mclk);
+    type ClockId: crate::clock::v2::apb::ApbId + crate::clock::v2::pclk::PclkId;
+
+    fn peripheral_reg_block(p: &mut Peripherals) -> &adc0::RegisterBlock;
 
     #[hal_cfg(any("adc-d11", "adc-d21"))]
     fn enable_pm(pm: &mut pac::Pm);
@@ -227,9 +228,19 @@ impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
 }
 
 /// ADC Instance
+#[hal_cfg(any("adc-d11", "adc-d21"))]
 pub struct Adc<I: AdcInstance, F = NoneT> {
     adc: I::Instance,
     _irqs: PhantomData<F>,
+    cfg: Config,
+}
+
+/// ADC Instance
+#[hal_cfg("adc-d5x")]
+pub struct Adc<I: AdcInstance, F = NoneT> {
+    adc: I::Instance,
+    _irqs: PhantomData<F>,
+    _apbclk: crate::clock::v2::apb::ApbClk<I::ClockId>,
     cfg: Config,
 }
 
@@ -241,25 +252,38 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     /// is faster than 100Mhz, since this is the maximum frequency for GCLK_ADCx
     /// as per the datasheet.
     ///
+    /// The [`new`](Self::new) function currently takes an `&` reference to a
+    /// [`Pclk`](crate::clock::v2::pclk::Pclk). In the future this will likely
+    /// change to taking full ownership of it; in the meantime, you must ensure
+    /// that the PCLK is enabled for the `Adc` struct's lifetime.
+    ///
     /// NOTE: If you plan to run the chip above 100°C, then the maximum GCLK
     /// frequency for the ADC is restricted to 90Mhz for stable performance.
     #[hal_cfg("adc-d5x")]
     #[inline]
-    pub fn new(
+    pub fn new<PS: crate::clock::v2::pclk::PclkSourceId>(
         adc: I::Instance,
         config: Config,
-        mclk: &mut pac::Mclk,
-        clock: I::Clock,
+        clk: crate::clock::v2::apb::ApbClk<I::ClockId>,
+        pclk: &crate::clock::v2::pclk::Pclk<I::ClockId, PS>,
     ) -> Result<(Self, Channels<I>), Error> {
-        if (clock.into() as Hertz).to_Hz() > 100_000_000 {
+        // TODO: Ideally, the ADC struct would take ownership of the Pclk type here. However, since
+        // clock::v2 is not implemented for all chips yet, the generics for the Adc type would be
+        // different between chip families, leading to massive and unnecessary code duplication. In
+        // the meantime, we use a "lite" variation of the typelevel guarantees laid out by the
+        // clock::v2 module, meaning that we can guarantee that the clocks are enabled at the time
+        // of creation of the Adc struct; however we can't guarantee that the clock will stay
+        // enabled for the duration of its lifetime.
+
+        if pclk.freq() > fugit::HertzU32::from_raw(100_000_000) {
             // Clock source is too fast
             return Err(Error::ClockTooFast);
         }
 
-        I::enable_mclk(mclk);
         let mut new_adc = Self {
             adc,
             _irqs: PhantomData,
+            _apbclk: clk,
             cfg: config,
         };
         new_adc.configure(config)?;
@@ -274,7 +298,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         pm: &mut pac::Pm,
         clock: I::Clock,
     ) -> Result<(Self, Channels<I>), Error> {
-        if (clock.into() as Hertz).to_Hz() > 48_000_000 {
+        if (clock.into() as crate::time::Hertz).to_Hz() > 48_000_000 {
             // Clock source is too fast
             return Err(Error::ClockTooFast);
         }
@@ -290,6 +314,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     }
 
     #[cfg(feature = "async")]
+    #[hal_macro_helper]
     #[inline]
     pub fn into_future<F>(self, _irqs: F) -> Adc<I, F>
     where
@@ -303,6 +328,8 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         Adc {
             adc: self.adc,
             cfg: self.cfg,
+            #[hal_cfg("adc-d5x")]
+            _apbclk: self._apbclk,
             _irqs: PhantomData,
         }
     }
@@ -368,13 +395,27 @@ impl<I: AdcInstance, F> Adc<I, F> {
         Ok(())
     }
 
-    /// Return the underlying ADC PAC object
+    /// Return the underlying ADC PAC object.
     ///
     /// You must also return all channels to the ADC to free its resources.
+    #[hal_cfg(any("adc-d11", "adc-d21"))]
     #[inline]
     pub fn free(mut self, _channels: Channels<I>) -> I::Instance {
         self.software_reset();
         self.adc
+    }
+
+    /// Return the underlying ADC PAC object and the enabled APB ADC clock.
+    ///
+    /// You must also return all channels to the ADC to free its resources.
+    #[hal_cfg("adc-d5x")]
+    #[inline]
+    pub fn free(
+        mut self,
+        _channels: Channels<I>,
+    ) -> (I::Instance, crate::clock::v2::apb::ApbClk<I::ClockId>) {
+        self.software_reset();
+        (self.adc, self._apbclk)
     }
 
     /// Reset the peripheral.
