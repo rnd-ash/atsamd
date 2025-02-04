@@ -13,12 +13,8 @@ macro_rules! adc_pins {
         crate::paste::item! {
             $(
                 $( #[$cfg] )?
-                impl<M: PinMode> AdcPin<$Adc, [<Ch $CHAN>]> for Pin<$PinId, M> {
-                    type Configured = Pin<$PinId, AlternateB>;
-
-                    fn into_function(self) -> Self::Configured {
-                        self.into_alternate()
-                    }
+                impl AdcPin<$Adc> for Pin<$PinId, AlternateB> {
+                    const CHANNEL: u8 = $CHAN;
                 }
             )+
         }

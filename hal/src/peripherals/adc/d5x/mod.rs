@@ -167,8 +167,8 @@ impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
         if vref.tsen().bit_is_clear() || vref.ondemand().bit_is_clear() {
             return Err(Error::TemperatureSensorNotEnabled);
         }
-        let mut tp = self.read_blocking(0x1C) as f32;
-        let mut tc = self.read_blocking(0x1D) as f32;
+        let mut tp = self.read_blocking_channel(0x1C) as f32;
+        let mut tc = self.read_blocking_channel(0x1D) as f32;
 
         if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
             // to prevent incorrect readings, divide by number of samples if the
