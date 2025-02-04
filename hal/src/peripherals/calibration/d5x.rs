@@ -74,32 +74,34 @@ pub fn adc1_biasr2r_scale_cal() -> u8 {
     cal(3, 0, 0b111) as u8
 }
 
+/// Calibration temperature parameter 'TL', formed by TLI and TLD (TL'Integer', TL'Decimal')
 pub fn tl() -> f32 {
-    parts_to_f32(cal(0x80, 7, 0b11111111), cal(0x80 + 1, 3, 0b1111))
+    parts_to_f32(tli(), tld())
 }
 
+/// Calibration temperature parameter 'TH', formed by THI and THD (TH'Integer', TH'Decimal')
 pub fn th() -> f32 {
-    parts_to_f32(cal(0x80 + 2, 3, 0b11111111), cal(0x80 + 2, 7, 0b1111))
+    parts_to_f32(thi(), thd())
 }
 
 /// Temperature calibration - Integer part of calibration temperature TL
-pub fn tli() -> u8 {
-    cal(0x80, 7, 0b11111111) as u8
+pub fn tli() -> u32 {
+    cal(0x80, 7, 0b11111111)
 }
 
 /// Temperature calibration - Decimal part of calibration temperature TL
-pub fn tld() -> u8 {
-    cal(0x80 + 1, 3, 0b1111) as u8
+pub fn tld() -> u32 {
+    cal(0x80 + 1, 3, 0b1111)
 }
 
 /// Temperature calibration - Integer part of calibration temperature TH
-pub fn thi() -> u8 {
-    cal(0x80 + 2, 3, 0b11111111) as u8
+pub fn thi() -> u32 {
+    cal(0x80 + 2, 3, 0b11111111)
 }
 
 /// Temperature calibration - Decimal part of calibration temperature TH
-pub fn thd() -> u8 {
-    cal(0x80 + 2, 7, 0b1111) as u8
+pub fn thd() -> u32 {
+    cal(0x80 + 2, 7, 0b1111)
 }
 
 /// Temperature calibration - Parameter VPL
