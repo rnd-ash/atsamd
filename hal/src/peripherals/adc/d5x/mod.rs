@@ -3,8 +3,7 @@ pub mod pin;
 use pac::adc0::avgctrl::Samplenumselect;
 use pac::adc0::ctrlb::Resselselect;
 
-use super::{Adc, AdcAccumulation, Config, Error, Flags};
-use super::{AdcInstance, PrimaryAdc};
+use super::{Adc, AdcAccumulation, AdcInstance, Config, Error, Flags, PrimaryAdc};
 use crate::typelevel::NoneT;
 use crate::{calibration, pac};
 
@@ -16,7 +15,8 @@ impl PrimaryAdc for Adc0 {}
 
 impl AdcInstance for Adc0 {
     type Instance = pac::Adc0;
-    type Clock = crate::clock::Adc0Clock;
+
+    type ClockId = crate::clock::v2::pclk::ids::Adc0;
 
     #[cfg(feature = "async")]
     type Interrupt = crate::async_hal::interrupts::ADC0;
@@ -24,11 +24,6 @@ impl AdcInstance for Adc0 {
     #[inline]
     fn peripheral_reg_block(p: &mut pac::Peripherals) -> &pac::adc0::RegisterBlock {
         &p.adc0
-    }
-
-    #[inline]
-    fn enable_mclk(mclk: &mut pac::Mclk) {
-        mclk.apbdmask().modify(|_, w| w.adc0_().set_bit());
     }
 
     #[inline]
@@ -54,7 +49,8 @@ pub struct Adc1 {
 
 impl AdcInstance for Adc1 {
     type Instance = pac::Adc1;
-    type Clock = crate::clock::Adc1Clock;
+
+    type ClockId = crate::clock::v2::pclk::ids::Adc1;
 
     #[cfg(feature = "async")]
     type Interrupt = crate::async_hal::interrupts::ADC1;
@@ -62,11 +58,6 @@ impl AdcInstance for Adc1 {
     #[inline]
     fn peripheral_reg_block(p: &mut pac::Peripherals) -> &pac::adc0::RegisterBlock {
         &p.adc1
-    }
-
-    #[inline]
-    fn enable_mclk(mclk: &mut pac::Mclk) {
-        mclk.apbdmask().modify(|_, w| w.adc1_().set_bit());
     }
 
     #[inline]
