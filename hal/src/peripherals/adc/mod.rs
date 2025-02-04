@@ -2,7 +2,6 @@ use core::{marker::PhantomData, ops::Deref};
 
 use atsamd_hal_macros::{hal_cfg, hal_macro_helper, hal_module};
 use pac::Peripherals;
-use seq_macro::seq;
 
 use crate::{
     gpio::AnyPin,
@@ -132,99 +131,11 @@ pub trait AdcInstance {
 }
 
 /// Trait representing a GPIO pin which can be used as an input for an ADC
-pub trait AdcPin<I, C>: AnyPin + Sealed
+pub trait AdcPin<I>: AnyPin<Mode = crate::gpio::AlternateB> + Sealed
 where
     I: AdcInstance,
-    C: ChId,
 {
-    type Configured;
-
-    fn into_function(self) -> Self::Configured;
-}
-
-/// Trait representing an ADC channel ID.
-pub trait ChId {
-    const ID: u8;
-}
-
-/// ADC channel.
-///
-/// This struct must hold a concrete [`Pin`](crate::gpio::Pin) which implements
-/// [`AdcPin`] in order to perform conversions. By default, channels don't hold
-/// any pin when they are created by [`Adc::new`]. Use
-/// [`Channel::with_pin`](Self::with_pin) to give a pin to this [`Channel`].
-pub struct Channel<I: AdcInstance, Id: ChId, P> {
-    _pin: P,
-    _instance: PhantomData<I>,
-    _id: PhantomData<Id>,
-}
-
-// These methods are only implemented for a Channel that doesn't hold a pin yet
-impl<I: AdcInstance, Id: ChId> Channel<I, Id, NoneT> {
-    // NOTE: `new`` must be private so a channel isn't accidentally created outside
-    // this module, breaking the typelevel guarantees laid out by the adc driver
-    #[inline]
-    fn new() -> Channel<I, Id, NoneT> {
-        Channel {
-            _pin: NoneT,
-            _instance: PhantomData,
-            _id: PhantomData,
-        }
-    }
-
-    /// Give a concrete pin to this [`Channel`], which will be used by the ADC
-    /// to measure voltage.
-    ///
-    /// This methods accepts any pin that can potentially be configured as an
-    /// ADC channel, and automatically puts it in the Alternate B mode.
-    #[inline]
-    pub fn with_pin<N: AdcPin<I, Id>>(self, pin: N) -> Channel<I, Id, N::Configured> {
-        // NOTE: While AdcPin is implemented for any pin that has the *potential* to be
-        // turned into an AlternateB pin (which is the ADC function), we know that any
-        // Channel holding a type implementing AdcPin must have already configured the
-        // pin to the alternate B function, since the with_pin method is the only way to
-        // insert a pin into the Channel.
-        Channel {
-            _pin: pin.into_function(),
-            _instance: PhantomData,
-            _id: PhantomData,
-        }
-    }
-}
-
-// These methods are only implemented for a Channel that holds a configured pin
-impl<I: AdcInstance, Id: ChId, P: AdcPin<I, Id>> Channel<I, Id, P> {
-    #[inline]
-    pub fn read_blocking<F>(&self, adc: &mut Adc<I, F>) -> u16 {
-        adc.read_blocking(Id::ID)
-    }
-
-    #[inline]
-    pub fn read_buffer_blocking<F>(
-        &self,
-        adc: &mut Adc<I, F>,
-        dst: &mut [u16],
-    ) -> Result<(), Error> {
-        adc.read_buffer_blocking(Id::ID, dst)
-    }
-
-    #[cfg(feature = "async")]
-    #[inline]
-    pub async fn read<F>(&self, adc: &mut Adc<I, F>) -> u16
-    where
-        F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
-    {
-        adc.read(Id::ID).await
-    }
-
-    #[cfg(feature = "async")]
-    #[inline]
-    pub async fn read_buffer<F>(&self, adc: &mut Adc<I, F>, dst: &mut [u16]) -> Result<(), Error>
-    where
-        F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
-    {
-        adc.read_buffer(Id::ID, dst).await
-    }
+    const CHANNEL: u8;
 }
 
 /// ADC Instance
@@ -266,7 +177,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         config: Config,
         clk: crate::clock::v2::apb::ApbClk<I::ClockId>,
         pclk: &crate::clock::v2::pclk::Pclk<I::ClockId, PS>,
-    ) -> Result<(Self, Channels<I>), Error> {
+    ) -> Result<Self, Error> {
         // TODO: Ideally, the ADC struct would take ownership of the Pclk type here. However, since
         // clock::v2 is not implemented for all chips yet, the generics for the Adc type would be
         // different between chip families, leading to massive and unnecessary code duplication. In
@@ -287,7 +198,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
             cfg: config,
         };
         new_adc.configure(config)?;
-        Ok((new_adc, Channels::new()))
+        Ok(new_adc)
     }
 
     #[hal_cfg(any("adc-d11", "adc-d21"))]
@@ -297,7 +208,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         config: Config,
         pm: &mut pac::Pm,
         clock: I::Clock,
-    ) -> Result<(Self, Channels<I>), Error> {
+    ) -> Result<Self, Error> {
         if (clock.into() as crate::time::Hertz).to_Hz() > 48_000_000 {
             // Clock source is too fast
             return Err(Error::ClockTooFast);
@@ -310,7 +221,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
             cfg: config,
         };
         new_adc.configure(config)?;
-        Ok((new_adc, Channels::new()))
+        Ok(new_adc)
     }
 
     #[cfg(feature = "async")]
@@ -356,8 +267,15 @@ impl<I: AdcInstance, F> Adc<I, F> {
         self.sync();
     }
 
+    /// Read a single value from the provided ADC pin, in a blocking fashion
     #[inline]
-    pub fn read_blocking(&mut self, ch: u8) -> u16 {
+    pub fn read_blocking<P: AdcPin<I>>(&mut self, _pin: &mut P) -> u16 {
+        self.read_blocking_channel(P::CHANNEL)
+    }
+
+    /// Read a single value from the provided channel, in a blocking fashion
+    #[inline]
+    fn read_blocking_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
         self.disable_interrupts(Flags::all());
@@ -373,8 +291,19 @@ impl<I: AdcInstance, F> Adc<I, F> {
         self.conversion_result()
     }
 
+    /// Read into a buffer from the provided ADC pin, in a blocking fashion
     #[inline]
-    pub fn read_buffer_blocking(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
+    pub fn read_buffer_blocking<P: AdcPin<I>>(
+        &mut self,
+        _pin: &mut P,
+        dst: &mut [u16],
+    ) -> Result<(), Error> {
+        self.read_buffer_blocking_channel(P::CHANNEL, dst)
+    }
+
+    /// Read into a buffer from the provided channel, in a blocking fashion
+    #[inline]
+    fn read_buffer_blocking_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
         self.enable_freerunning();
@@ -396,24 +325,17 @@ impl<I: AdcInstance, F> Adc<I, F> {
     }
 
     /// Return the underlying ADC PAC object.
-    ///
-    /// You must also return all channels to the ADC to free its resources.
     #[hal_cfg(any("adc-d11", "adc-d21"))]
     #[inline]
-    pub fn free(mut self, _channels: Channels<I>) -> I::Instance {
+    pub fn free(mut self) -> I::Instance {
         self.software_reset();
         self.adc
     }
 
     /// Return the underlying ADC PAC object and the enabled APB ADC clock.
-    ///
-    /// You must also return all channels to the ADC to free its resources.
     #[hal_cfg("adc-d5x")]
     #[inline]
-    pub fn free(
-        mut self,
-        _channels: Channels<I>,
-    ) -> (I::Instance, crate::clock::v2::apb::ApbClk<I::ClockId>) {
+    pub fn free(mut self) -> (I::Instance, crate::clock::v2::apb::ApbClk<I::ClockId>) {
         self.software_reset();
         (self.adc, self._apbclk)
     }
@@ -440,7 +362,7 @@ impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
             self.set_reference(Reference::Intvcc1);
         }
 
-        let mut adc_val = self.read_blocking(chan);
+        let mut adc_val = self.read_blocking_channel(chan);
         if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
             let div: u16 = 2u16.pow(sum as u32);
             adc_val /= div;
@@ -460,8 +382,15 @@ impl<I: AdcInstance, F> Adc<I, F>
 where
     F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
 {
+    /// Read a single value from the provided ADC pin.
     #[inline]
-    pub async fn read(&mut self, ch: u8) -> u16 {
+    pub async fn read<P: AdcPin<I>>(&mut self, _pin: &mut P) -> u16 {
+        self.read_channel(P::CHANNEL).await
+    }
+
+    /// Read a single value from the provided channel ID
+    #[inline]
+    async fn read_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
         self.mux(ch);
         self.power_up();
@@ -475,8 +404,19 @@ where
         result
     }
 
+    /// Read into a buffer from the provided ADC pin
     #[inline]
-    pub async fn read_buffer(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
+    pub async fn read_buffer<P: AdcPin<I>>(
+        &mut self,
+        _pin: &mut P,
+        dst: &mut [u16],
+    ) -> Result<(), Error> {
+        self.read_buffer_channel(P::CHANNEL, dst).await
+    }
+
+    /// Read into a buffer from the provided channel ID
+    #[inline]
+    async fn read_buffer_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
         self.enable_freerunning();
 
@@ -494,71 +434,3 @@ where
         Ok(())
     }
 }
-
-// Channel implementation
-
-#[hal_cfg("adc-d5x")]
-macro_rules! with_num_channels {
-    ($some_macro:ident) => {
-        $some_macro! {16}
-    };
-}
-
-#[hal_cfg(any("adc-d21"))]
-macro_rules! with_num_channels {
-    ($some_macro:ident) => {
-        $some_macro! {20}
-    };
-}
-
-#[hal_cfg(any("adc-d11"))]
-macro_rules! with_num_channels {
-    ($some_macro:ident) => {
-        $some_macro! {10}
-    };
-}
-
-/// Get the number of channels as a literal
-macro_rules! get {
-    ($literal:literal) => {
-        $literal
-    };
-}
-
-/// The number of ADC channels per instance on this chip.
-pub const NUM_CHANNELS: usize = with_num_channels!(get);
-
-macro_rules! define_channels_struct {
-    ($num_channels:literal) => {
-        seq!(N in 0..$num_channels {
-            #(
-                /// Type alias for a channel number
-                pub enum Ch~N {}
-
-                impl ChId for Ch~N {
-                    const ID: u8 = N;
-                }
-            )*
-
-            /// Struct generating individual handles to each ADC channel
-            pub struct Channels<I: AdcInstance>(
-                #(
-                    pub Channel<I, Ch~N, NoneT>,
-                )*
-            );
-
-            impl<I: AdcInstance> Channels<I> {
-                #[inline]
-                fn new() -> Self {
-                    Self (
-                        #(
-                            Channel::new(),
-                        )*
-                    )
-                }
-            }
-        });
-    };
-}
-
-with_num_channels!(define_channels_struct);
