@@ -148,8 +148,9 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     /// Construct a new ADC instance
     ///
     /// ## Important
+    ///
     /// This function will return `Err` if the clock source provided
-    /// is faster than 100Mhz, since this is the maximum frequency for GCLK_ADCx
+    /// is faster than 100 MHz, since this is the maximum frequency for GCLK_ADCx
     /// as per the datasheet.
     ///
     /// The [`new`](Self::new) function currently takes an `&` reference to a
@@ -190,6 +191,13 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         Ok(new_adc)
     }
 
+    /// Construct a new ADC instance
+    ///
+    /// ## Important
+    ///
+    /// This function will return `Err` if the clock source provided
+    /// is faster than 48 MHz, since this is the maximum frequency for the
+    /// ADC as per the datasheet.
     #[hal_cfg(any("adc-d11", "adc-d21"))]
     #[inline]
     pub fn new(
@@ -267,9 +275,11 @@ impl<I: AdcInstance, F> Adc<I, F> {
     fn read_blocking_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
+
         self.disable_interrupts(Flags::all());
         self.mux(ch);
         self.power_up();
+
         self.start_conversion();
         self.clear_flags(Flags::RESRDY);
         let _discard = self.conversion_result();
@@ -295,11 +305,12 @@ impl<I: AdcInstance, F> Adc<I, F> {
     fn read_buffer_blocking_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
-        self.enable_freerunning();
 
+        self.enable_freerunning();
         self.disable_interrupts(Flags::all());
         self.mux(ch);
         self.power_up();
+
         self.start_conversion();
         for result in dst.iter_mut() {
             while !self.read_flags().contains(Flags::RESRDY) {
@@ -381,9 +392,11 @@ where
     #[inline]
     async fn read_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
+        let _ = self.check_and_clear_flags(self.read_flags());
+
         self.mux(ch);
         self.power_up();
-        let _ = self.check_and_clear_flags(self.read_flags());
+
         self.start_conversion();
         // Here we explicitly ignore the result, because we know that
         // overrun errors are impossible since the ADC is configured in one-shot mode.
@@ -407,11 +420,12 @@ where
     #[inline]
     async fn read_buffer_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
-        self.enable_freerunning();
+        let _ = self.check_and_clear_flags(self.read_flags());
 
+        self.enable_freerunning();
         self.mux(ch);
         self.power_up();
-        let _ = self.check_and_clear_flags(self.read_flags());
+
         self.start_conversion();
         for result in dst.iter_mut() {
             self.wait_flags(Flags::RESRDY).await?;
