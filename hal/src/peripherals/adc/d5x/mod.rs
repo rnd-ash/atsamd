@@ -6,6 +6,7 @@ use super::{
 use crate::typelevel::NoneT;
 use crate::{calibration, pac};
 
+/// ADC instance 0
 pub struct Adc0 {
     _adc: pac::Adc0,
 }
@@ -42,6 +43,7 @@ impl AdcInstance for Adc0 {
     }
 }
 
+/// ADC instance 0
 pub struct Adc1 {
     _adc: pac::Adc1,
 }
@@ -188,6 +190,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(super) fn power_down(&mut self) {
         self.adc.ctrla().modify(|_, w| w.enable().clear_bit());
         self.sync();

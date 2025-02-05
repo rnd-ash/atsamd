@@ -1,3 +1,5 @@
+//! Analog-to-Digital Converter
+
 use core::{marker::PhantomData, ops::Deref};
 
 use atsamd_hal_macros::{hal_cfg, hal_module};
@@ -30,6 +32,7 @@ use crate::pac::adc as adc0;
 #[hal_cfg("adc-d5x")]
 use crate::pac::adc0;
 
+/// Errors that may occur when operating the ADC
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
@@ -60,6 +63,7 @@ pub enum Error {
     InvalidSampleBitWidth,
 }
 
+/// Voltage source to use when using the ADC to measure the CPU voltage
 #[hal_cfg("adc-d5x")]
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
@@ -72,6 +76,7 @@ pub enum CpuVoltageSource {
     Io = 0x1A,
 }
 
+/// Voltage source to use when using the ADC to measure the CPU voltage
 #[hal_cfg(any("adc-d21", "adc-d11"))]
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
@@ -83,6 +88,7 @@ pub enum CpuVoltageSource {
 }
 
 bitflags::bitflags! {
+    /// ADC interrupt flags
     #[derive(Clone, Copy)]
     pub struct Flags: u8 {
         /// Window monitor interrupt
