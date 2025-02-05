@@ -7,27 +7,28 @@ use crate::pac::adc0;
 use crate::pac::adc as adc0;
 
 #[hal_cfg(any("adc-d21", "adc-d11"))]
-pub use adc0::ctrlb::Prescalerselect as AdcDivider;
+pub use adc0::ctrlb::Prescalerselect as Prescaler;
 
 #[hal_cfg("adc-d5x")]
-pub use adc0::ctrla::Prescalerselect as AdcDivider;
+pub use adc0::ctrla::Prescalerselect as Prescaler;
 
-pub use adc0::avgctrl::Samplenumselect as AdcSampleCount;
+pub use adc0::avgctrl::Samplenumselect as SampleCount;
 
-pub use adc0::ctrlb::Resselselect as AdcResolution;
-pub use adc0::refctrl::Refselselect;
+pub use adc0::ctrlb::Resselselect as Resolution;
+
+pub use adc0::refctrl::Refselselect as Reference;
 
 /// Result accumulation strategy for the ADC
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub enum AdcAccumulation {
+pub enum Accumulation {
     /// The ADC will read once and then the result is ready
     Single,
     /// The ADC will read [AdcSampleCount] samples, average them out
     /// into a 16 bit wide value, and then the result is ready
-    Average(AdcSampleCount),
+    Average(SampleCount),
     /// The ADC will read [AdcSampleCount] samples, sum them
     /// into a 16 bit wide value, and then the result is ready
-    Summed(AdcSampleCount),
+    Summed(SampleCount),
 }
 
 /// # ADC configuration builder
@@ -62,11 +63,11 @@ pub enum AdcAccumulation {
 /// ```
 #[derive(Copy, Clone)]
 pub struct Config {
-    pub clk_divider: AdcDivider,
+    pub clk_divider: Prescaler,
     pub sample_clock_cycles: u8,
-    pub bit_width: AdcResolution,
-    pub accumulation: AdcAccumulation,
-    pub vref: Refselselect,
+    pub bit_width: Resolution,
+    pub accumulation: Accumulation,
+    pub vref: Reference,
 }
 
 impl Config {
@@ -82,11 +83,11 @@ impl Config {
     /// * Use VDDANA as reference voltage for a full 0.0-3.3V reading
     pub fn new() -> Self {
         Self {
-            clk_divider: AdcDivider::Div32,
+            clk_divider: Prescaler::Div32,
             sample_clock_cycles: 6,
-            bit_width: AdcResolution::_12bit,
-            accumulation: AdcAccumulation::Single,
-            vref: Refselselect::Intvcc1,
+            bit_width: Resolution::_12bit,
+            accumulation: Accumulation::Single,
+            vref: Reference::Intvcc1,
         }
     }
 
@@ -96,18 +97,18 @@ impl Config {
     ///
     /// ## Example:
     /// * Input clock 48MHz, div 32 => ADC Clock is 1.5MHz
-    pub fn clock_divider(mut self, div: AdcDivider) -> Self {
+    pub fn clock_divider(mut self, div: Prescaler) -> Self {
         self.clk_divider = div;
         self
     }
 
     /// This setting adjusts the bit width of each ADC sample
-    pub fn sample_resolution(mut self, bit_width: AdcResolution) -> Self {
+    pub fn sample_resolution(mut self, bit_width: Resolution) -> Self {
         self.bit_width = bit_width;
         self
     }
 
-    pub fn with_vref(mut self, reference: Refselselect) -> Self {
+    pub fn with_vref(mut self, reference: Reference) -> Self {
         self.vref = reference;
         self
     }
@@ -128,7 +129,7 @@ impl Config {
     /// will reduce the overall ADC sample rate by a factor of 1/n, and the
     /// returned value will be 16bits long no matter what the sample Bit
     /// width was selected as
-    pub fn accumulation_method(mut self, method: AdcAccumulation) -> Self {
+    pub fn accumulation_method(mut self, method: Accumulation) -> Self {
         self.accumulation = method;
         self
     }
@@ -154,9 +155,9 @@ impl Config {
         let mut clocks_per_sample = self.sample_clock_cycles as u32 + (self.bit_width as u32);
 
         let multi = match self.accumulation {
-            AdcAccumulation::Single => 1,
-            AdcAccumulation::Average(adc_sample_count) => adc_sample_count as u32,
-            AdcAccumulation::Summed(adc_sample_count) => adc_sample_count as u32,
+            Accumulation::Single => 1,
+            Accumulation::Average(adc_sample_count) => adc_sample_count as u32,
+            Accumulation::Summed(adc_sample_count) => adc_sample_count as u32,
         };
         clocks_per_sample *= multi;
         adc_clk_freq / clocks_per_sample

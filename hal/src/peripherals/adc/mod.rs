@@ -30,14 +30,6 @@ use crate::pac::adc as adc0;
 #[hal_cfg("adc-d5x")]
 use crate::pac::adc0;
 
-pub use adc0::avgctrl::Samplenumselect;
-/// Samples per reading
-pub use adc0::avgctrl::Samplenumselect as SampleRate;
-/// Reading resolution in bits
-pub use adc0::ctrlb::Resselselect as Resolution;
-/// Reference voltage (or its source)
-pub use adc0::refctrl::Refselselect as Reference;
-
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
@@ -248,10 +240,10 @@ impl<I: AdcInstance, F> Adc<I, F> {
     /// 1.0 = 2^(reading_bitwidth)
     fn reading_to_f32(&self, raw: u16) -> f32 {
         let max = match self.cfg.bit_width {
-            AdcResolution::_16bit => 65536,
-            AdcResolution::_12bit => 4096,
-            AdcResolution::_10bit => 1024,
-            AdcResolution::_8bit => 256,
+            Resolution::_16bit => 65536,
+            Resolution::_12bit => 4096,
+            Resolution::_10bit => 1024,
+            Resolution::_8bit => 256,
         };
         raw as f32 / max as f32
     }
@@ -360,7 +352,7 @@ impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
         }
 
         let mut adc_val = self.read_blocking_channel(chan);
-        if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
+        if let Accumulation::Summed(sum) = self.cfg.accumulation {
             let div: u16 = 2u16.pow(sum as u32);
             adc_val /= div;
         }
