@@ -49,62 +49,49 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         // This also disables the ADC
         self.software_reset();
         I::calibrate(&self.adc);
-        self.sync();
-        self.adc
-            .ctrlb()
-            .modify(|_, w| w.prescaler().variant(config.clk_divider));
-        self.sync();
-        self.adc
-            .ctrlb()
-            .modify(|_, w| w.ressel().variant(config.bit_width));
+
+        self.adc.ctrlb().modify(|_, w| {
+            w.prescaler().variant(config.clk_divider);
+            w.ressel().variant(config.bit_width)
+        });
         self.sync();
 
         self.adc
             .sampctrl()
             .modify(|_, w| unsafe { w.samplen().bits(config.sample_clock_cycles) }); // sample length
-        self.sync();
+
         self.adc.inputctrl().modify(|_, w| {
+            // No negative input (internal gnd)
             w.muxneg().gnd();
             w.gain().variant(Gainselect::Div2)
-        }); // No negative input (internal gnd)
+        });
         self.sync();
 
         // Check bit width selected
         if config.accumulation != Accumulation::Single && config.bit_width != Resolution::_16bit {
             return Err(super::Error::InvalidSampleBitWidth);
         }
-        match config.accumulation {
-            Accumulation::Single => {
-                // 1 sample to be used as is
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(SampleCount::_1);
-                    unsafe { w.adjres().bits(0) }
-                });
-            }
-            Accumulation::Average(adc_sample_count) => {
-                // A total of `adc_sample_count` elements will be averaged by the ADC
-                // before it returns the result
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(adc_sample_count);
-                    unsafe {
-                        // Table 45-3 SAME51 datasheet
-                        w.adjres()
-                            .bits(core::cmp::min(adc_sample_count as u8, 0x04))
-                    }
-                });
-            }
-            Accumulation::Summed(adc_sample_count) => {
-                // A total of `adc_sample_count` elements will be summed by the ADC
-                // before it returns the result
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(adc_sample_count);
-                    unsafe { w.adjres().bits(0) }
-                });
-            }
-        }
 
+        let (sample_count, adjres) = match config.accumulation {
+            // 1 sample to be used as is
+            Accumulation::Single => (SampleCount::_1, 0),
+            // A total of `adc_sample_count` elements will be averaged by the ADC
+            // before it returns the result
+            Accumulation::Average(cnt) => (cnt, core::cmp::min(cnt as u8, 0x04)),
+            // A total of `adc_sample_count` elements will be summed by the ADC
+            // before it returns the result
+            Accumulation::Summed(cnt) => (cnt, 0),
+        };
+
+        self.adc.avgctrl().modify(|_, w| {
+            w.samplenum().variant(sample_count);
+            unsafe { w.adjres().bits(adjres) }
+        });
         self.sync();
+
         self.set_reference(config.vref);
+        self.sync();
+
         Ok(())
     }
 }
