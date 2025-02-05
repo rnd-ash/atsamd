@@ -9,6 +9,7 @@ use pac::adc::inputctrl::Gainselect;
 use pac::Peripherals;
 pub mod pin;
 
+/// Wrapper around the ADC instance
 pub struct Adc0 {
     _adc: pac::Adc,
 }
@@ -118,6 +119,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(super) fn power_down(&mut self) {
         self.adc.ctrla().modify(|_, w| w.enable().clear_bit());
         self.sync();
