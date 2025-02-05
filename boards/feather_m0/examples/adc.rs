@@ -1,10 +1,13 @@
 #![no_std]
 #![no_main]
 
-#[cfg(not(feature = "use_semihosting"))]
-use panic_halt as _;
-#[cfg(feature = "use_semihosting")]
-use panic_semihosting as _;
+// #[cfg(not(feature = "use_semihosting"))]
+// use panic_halt as _;
+// #[cfg(feature = "use_semihosting")]
+// use panic_semihosting as _;
+
+use defmt_rtt as _;
+use panic_probe as _;
 
 use cortex_m_semihosting::hprintln;
 
@@ -13,7 +16,7 @@ use bsp::pac;
 use feather_m0 as bsp;
 
 use bsp::entry;
-use hal::adc::Adc;
+use hal::adc::{Accumulation, Adc, Config, Prescaler, Resolution};
 use hal::clock::GenericClockController;
 use hal::prelude::*;
 use pac::{CorePeripherals, Peripherals};
@@ -30,12 +33,22 @@ fn main() -> ! {
     );
     let pins = bsp::Pins::new(peripherals.port);
     let mut delay = hal::delay::Delay::new(core.SYST, &mut clocks);
-    let mut adc = Adc::adc(peripherals.adc, &mut peripherals.pm, &mut clocks);
+
+    let gclk0 = clocks.gclk0();
+    let adc_clock = clocks.adc(&gclk0).unwrap();
+
+    let adc_config = Config::new()
+        .clock_cycles_per_sample(5)
+        .clock_divider(Prescaler::Div4)
+        .sample_resolution(Resolution::_12bit)
+        .accumulation_method(Accumulation::Single);
+
+    let mut adc = Adc::new(peripherals.adc, adc_config, &mut peripherals.pm, &adc_clock).unwrap();
     let mut a0: bsp::A0 = pins.a0.into();
 
     loop {
-        let data: u16 = adc.read(&mut a0).unwrap();
-        hprintln!("{}", data).ok();
+        let data = adc.read_blocking(&mut a0);
+        defmt::info!("{}", data);
         delay.delay_ms(1000u16);
     }
 }
