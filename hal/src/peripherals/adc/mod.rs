@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, ops::Deref};
 
-use atsamd_hal_macros::{hal_cfg, hal_macro_helper, hal_module};
+use atsamd_hal_macros::{hal_cfg, hal_module};
 use pac::Peripherals;
 
 use crate::{
@@ -113,9 +113,6 @@ pub trait AdcInstance {
     // The Adc0 and Adc1 PAC types implement Deref
     type Instance: Deref<Target = adc0::RegisterBlock>;
 
-    #[hal_cfg(any("adc-d11", "adc-d21"))]
-    type Clock: Into<crate::time::Hertz>;
-
     #[hal_cfg("adc-d5x")]
     type ClockId: crate::clock::v2::apb::ApbId + crate::clock::v2::pclk::PclkId;
 
@@ -207,9 +204,9 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         adc: I::Instance,
         config: Config,
         pm: &mut pac::Pm,
-        clock: I::Clock,
+        clock: &crate::clock::AdcClock,
     ) -> Result<Self, Error> {
-        if (clock.into() as crate::time::Hertz).to_Hz() > 48_000_000 {
+        if (clock.freq() as crate::time::Hertz).to_Hz() > 48_000_000 {
             // Clock source is too fast
             return Err(Error::ClockTooFast);
         }
@@ -225,7 +222,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     }
 
     #[cfg(feature = "async")]
-    #[hal_macro_helper]
+    #[atsamd_hal_macros::hal_macro_helper]
     #[inline]
     pub fn into_future<F>(self, _irqs: F) -> Adc<I, F>
     where
