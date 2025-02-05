@@ -17,7 +17,6 @@ impl PrimaryAdc for Adc0 {}
 
 impl AdcInstance for Adc0 {
     type Instance = pac::Adc;
-    type Clock = crate::clock::AdcClock;
 
     #[cfg(feature = "async")]
     type Interrupt = crate::async_hal::interrupts::ADC;
