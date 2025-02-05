@@ -278,15 +278,14 @@ impl<I: AdcInstance, F> Adc<I, F> {
 
         self.disable_interrupts(Flags::all());
         self.mux(ch);
-        self.power_up();
+
+        // Discard any potentially old measurements still lingering in the buffer
+        let _discard = self.conversion_result();
 
         self.start_conversion();
-        self.clear_flags(Flags::RESRDY);
-        let _discard = self.conversion_result();
         while !self.read_flags().contains(Flags::RESRDY) {
             core::hint::spin_loop();
         }
-        self.power_down();
         self.conversion_result()
     }
 
@@ -306,20 +305,27 @@ impl<I: AdcInstance, F> Adc<I, F> {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
 
-        self.enable_freerunning();
         self.disable_interrupts(Flags::all());
         self.mux(ch);
-        self.power_up();
 
+        // Discard any potentially old measurements still lingering in the buffer
+        let _discard = self.conversion_result();
+
+        self.enable_freerunning();
         self.start_conversion();
+
         for result in dst.iter_mut() {
             while !self.read_flags().contains(Flags::RESRDY) {
                 core::hint::spin_loop();
             }
             *result = self.conversion_result();
-            self.check_and_clear_flags(self.read_flags())?;
+
+            if let Err(e) = self.check_and_clear_flags(self.read_flags()) {
+                self.disable_freerunning();
+                return Err(e);
+            }
         }
-        self.power_down();
+
         self.disable_freerunning();
         Ok(())
     }
@@ -395,15 +401,15 @@ where
         let _ = self.check_and_clear_flags(self.read_flags());
 
         self.mux(ch);
-        self.power_up();
+
+        // Discard any potentially old measurements still lingering in the buffer
+        let _discard = self.conversion_result();
 
         self.start_conversion();
         // Here we explicitly ignore the result, because we know that
         // overrun errors are impossible since the ADC is configured in one-shot mode.
         let _ = self.wait_flags(Flags::RESRDY).await;
-        let result = self.conversion_result();
-        self.power_down();
-        result
+        self.conversion_result()
     }
 
     /// Read into a buffer from the provided ADC pin
@@ -422,17 +428,22 @@ where
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
 
-        self.enable_freerunning();
         self.mux(ch);
-        self.power_up();
 
+        // Discard any potentially old measurements still lingering in the buffer
+        let _discard = self.conversion_result();
+
+        self.enable_freerunning();
         self.start_conversion();
+
         for result in dst.iter_mut() {
-            self.wait_flags(Flags::RESRDY).await?;
+            if let Err(e) = self.wait_flags(Flags::RESRDY).await {
+                self.disable_freerunning();
+                return Err(e);
+            }
             *result = self.conversion_result();
         }
 
-        self.power_down();
         self.disable_freerunning();
         Ok(())
     }

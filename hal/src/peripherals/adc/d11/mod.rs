@@ -77,6 +77,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
             Accumulation::Single => (SampleCount::_1, 0),
             // A total of `adc_sample_count` elements will be averaged by the ADC
             // before it returns the result
+            // SAMD21 datasheet table 32-3 / SAMD11 datasheet table 31-3
             Accumulation::Average(cnt) => (cnt, core::cmp::min(cnt as u8, 0x04)),
             // A total of `adc_sample_count` elements will be summed by the ADC
             // before it returns the result
@@ -91,6 +92,10 @@ impl<I: AdcInstance> Adc<I, NoneT> {
 
         self.set_reference(config.vref);
         self.sync();
+
+        self.disable_freerunning();
+
+        self.power_up();
 
         Ok(())
     }
@@ -137,7 +142,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
 
     #[inline]
     pub(super) fn disable_freerunning(&mut self) {
-        self.adc.ctrlb().modify(|_, w| w.freerun().set_bit());
+        self.adc.ctrlb().modify(|_, w| w.freerun().clear_bit());
         self.sync();
     }
 
