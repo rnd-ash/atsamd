@@ -1,9 +1,8 @@
 pub mod pin;
 
-use pac::adc0::avgctrl::Samplenumselect;
-use pac::adc0::ctrlb::Resselselect;
-
-use super::{Adc, AdcAccumulation, AdcInstance, Config, Error, Flags, PrimaryAdc};
+use super::{
+    Accumulation, Adc, AdcInstance, Config, Error, Flags, PrimaryAdc, Resolution, SampleCount,
+};
 use crate::typelevel::NoneT;
 use crate::{calibration, pac};
 
@@ -101,20 +100,18 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         self.adc.inputctrl().modify(|_, w| w.muxneg().gnd()); // No negative input (internal gnd)
         self.sync();
         // Check bit width selected
-        if config.accumulation != AdcAccumulation::Single
-            && config.bit_width != Resselselect::_16bit
-        {
+        if config.accumulation != Accumulation::Single && config.bit_width != Resolution::_16bit {
             return Err(super::Error::InvalidSampleBitWidth);
         }
         match config.accumulation {
-            AdcAccumulation::Single => {
+            Accumulation::Single => {
                 // 1 sample to be used as is
                 self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(Samplenumselect::_1);
+                    w.samplenum().variant(SampleCount::_1);
                     unsafe { w.adjres().bits(0) }
                 });
             }
-            AdcAccumulation::Average(adc_sample_count) => {
+            Accumulation::Average(adc_sample_count) => {
                 // A total of `adc_sample_count` elements will be averaged by the ADC
                 // before it returns the result
                 self.adc.avgctrl().modify(|_, w| {
@@ -126,7 +123,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
                     }
                 });
             }
-            AdcAccumulation::Summed(adc_sample_count) => {
+            Accumulation::Summed(adc_sample_count) => {
                 // A total of `adc_sample_count` elements will be summed by the ADC
                 // before it returns the result
                 self.adc.avgctrl().modify(|_, w| {
@@ -170,7 +167,7 @@ impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
         let mut tp = self.read_blocking_channel(0x1C) as f32;
         let mut tc = self.read_blocking_channel(0x1D) as f32;
 
-        if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
+        if let Accumulation::Summed(sum) = self.cfg.accumulation {
             // to prevent incorrect readings, divide by number of samples if the
             // ADC was already configured in summation mode
             let div: f32 = (2u16.pow(sum as u32)) as f32;
