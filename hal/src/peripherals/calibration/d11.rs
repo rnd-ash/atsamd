@@ -33,9 +33,19 @@ fn cal_with_errata(
     }
 }
 
+/// ADC Linearity Calibration. Should be written to ADC CALIB register.
+pub fn adc_linearity_cal() -> u8 {
+    cal(3, 3, 0b1111_111) as u8
+}
+
+/// ADC Bias Calibration. Should be written to ADC CALIB register.
+pub fn adc_bias_cal() -> u8 {
+    cal(4, 5, 0b11) as u8
+}
+
 /// Returns the osc32k calibration value from the NVM calibration area
 pub fn osc32k_cal() -> u8 {
-    cal(4, 6, 0x7f) as u8
+    cal(4, 6, 0x7f) as u8 // 44:38
 }
 
 /// Returns the dfll48m coarse calibration value

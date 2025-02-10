@@ -2,7 +2,7 @@ use crate::typelevel::NoneT;
 
 use super::{Adc, AdcAccumulation, AdcInstance, Config, Error, Flags, PrimaryAdc};
 
-use crate::pac;
+use crate::{calibration, pac};
 use pac::adc::avgctrl::Samplenumselect;
 use pac::adc::ctrlb::Resselselect;
 use pac::adc::inputctrl::Gainselect;
@@ -33,7 +33,14 @@ impl AdcInstance for Adc0 {
     }
 
     #[inline]
-    fn calibrate(_instance: &Self::Instance) {}
+    fn calibrate(instance: &Self::Instance) {
+        instance.calib().write(|w| {
+            unsafe {
+                w.bias_cal().bits(calibration::adc_bias_cal());
+                w.linearity_cal().bits(calibration::adc_linearity_cal())
+            }
+        });
+    }
 
     #[cfg(feature = "async")]
     #[inline]
