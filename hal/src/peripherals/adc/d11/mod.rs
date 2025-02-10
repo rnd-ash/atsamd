@@ -4,7 +4,7 @@ use super::{
     Accumulation, Adc, AdcInstance, Config, Error, Flags, PrimaryAdc, Resolution, SampleCount,
 };
 
-use crate::pac;
+use crate::{calibration, pac};
 use pac::adc::inputctrl::Gainselect;
 use pac::Peripherals;
 pub mod pin;
@@ -33,7 +33,14 @@ impl AdcInstance for Adc0 {
     }
 
     #[inline]
-    fn calibrate(_instance: &Self::Instance) {}
+    fn calibrate(instance: &Self::Instance) {
+        instance.calib().write(|w| {
+            unsafe {
+                w.bias_cal().bits(calibration::adc_bias_cal());
+                w.linearity_cal().bits(calibration::adc_linearity_cal())
+            }
+        });
+    }
 
     #[cfg(feature = "async")]
     #[inline]
