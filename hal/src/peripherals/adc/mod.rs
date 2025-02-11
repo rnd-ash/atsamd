@@ -1,6 +1,8 @@
+//! Analog-to-Digital Converter
+
 use core::{marker::PhantomData, ops::Deref};
 
-use atsamd_hal_macros::{hal_cfg, hal_macro_helper, hal_module};
+use atsamd_hal_macros::{hal_cfg, hal_module};
 use pac::Peripherals;
 
 use crate::{
@@ -30,14 +32,7 @@ use crate::pac::adc as adc0;
 #[hal_cfg("adc-d5x")]
 use crate::pac::adc0;
 
-pub use adc0::avgctrl::Samplenumselect;
-/// Samples per reading
-pub use adc0::avgctrl::Samplenumselect as SampleRate;
-/// Reading resolution in bits
-pub use adc0::ctrlb::Resselselect as Resolution;
-/// Reference voltage (or its source)
-pub use adc0::refctrl::Refselselect as Reference;
-
+/// Errors that may occur when operating the ADC
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
@@ -68,6 +63,7 @@ pub enum Error {
     InvalidSampleBitWidth,
 }
 
+/// Voltage source to use when using the ADC to measure the CPU voltage
 #[hal_cfg("adc-d5x")]
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
@@ -80,6 +76,7 @@ pub enum CpuVoltageSource {
     Io = 0x1A,
 }
 
+/// Voltage source to use when using the ADC to measure the CPU voltage
 #[hal_cfg(any("adc-d21", "adc-d11"))]
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
@@ -91,6 +88,7 @@ pub enum CpuVoltageSource {
 }
 
 bitflags::bitflags! {
+    /// ADC interrupt flags
     #[derive(Clone, Copy)]
     pub struct Flags: u8 {
         /// Window monitor interrupt
@@ -112,9 +110,6 @@ pub trait AdcInstance {
 
     // The Adc0 and Adc1 PAC types implement Deref
     type Instance: Deref<Target = adc0::RegisterBlock>;
-
-    #[hal_cfg(any("adc-d11", "adc-d21"))]
-    type Clock: Into<crate::time::Hertz>;
 
     #[hal_cfg("adc-d5x")]
     type ClockId: crate::clock::v2::apb::ApbId + crate::clock::v2::pclk::PclkId;
@@ -159,8 +154,9 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     /// Construct a new ADC instance
     ///
     /// ## Important
+    ///
     /// This function will return `Err` if the clock source provided
-    /// is faster than 100Mhz, since this is the maximum frequency for GCLK_ADCx
+    /// is faster than 100 MHz, since this is the maximum frequency for GCLK_ADCx
     /// as per the datasheet.
     ///
     /// The [`new`](Self::new) function currently takes an `&` reference to a
@@ -201,15 +197,22 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         Ok(new_adc)
     }
 
+    /// Construct a new ADC instance
+    ///
+    /// ## Important
+    ///
+    /// This function will return `Err` if the clock source provided
+    /// is faster than 48 MHz, since this is the maximum frequency for the
+    /// ADC as per the datasheet.
     #[hal_cfg(any("adc-d11", "adc-d21"))]
     #[inline]
     pub fn new(
         adc: I::Instance,
         config: Config,
         pm: &mut pac::Pm,
-        clock: I::Clock,
+        clock: &crate::clock::AdcClock,
     ) -> Result<Self, Error> {
-        if (clock.into() as crate::time::Hertz).to_Hz() > 48_000_000 {
+        if (clock.freq() as crate::time::Hertz).to_Hz() > 48_000_000 {
             // Clock source is too fast
             return Err(Error::ClockTooFast);
         }
@@ -225,7 +228,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     }
 
     #[cfg(feature = "async")]
-    #[hal_macro_helper]
+    #[atsamd_hal_macros::hal_macro_helper]
     #[inline]
     pub fn into_future<F>(self, _irqs: F) -> Adc<I, F>
     where
@@ -251,10 +254,10 @@ impl<I: AdcInstance, F> Adc<I, F> {
     /// 1.0 = 2^(reading_bitwidth)
     fn reading_to_f32(&self, raw: u16) -> f32 {
         let max = match self.cfg.bit_width {
-            AdcResolution::_16bit => 65536,
-            AdcResolution::_12bit => 4096,
-            AdcResolution::_10bit => 1024,
-            AdcResolution::_8bit => 256,
+            Resolution::_16bit => 65536,
+            Resolution::_12bit => 4096,
+            Resolution::_10bit => 1024,
+            Resolution::_8bit => 256,
         };
         raw as f32 / max as f32
     }
@@ -278,16 +281,17 @@ impl<I: AdcInstance, F> Adc<I, F> {
     fn read_blocking_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
+
         self.disable_interrupts(Flags::all());
         self.mux(ch);
-        self.power_up();
-        self.start_conversion();
-        self.clear_flags(Flags::RESRDY);
+
+        // Discard any potentially old measurements still lingering in the buffer
         let _discard = self.conversion_result();
+
+        self.start_conversion();
         while !self.read_flags().contains(Flags::RESRDY) {
             core::hint::spin_loop();
         }
-        self.power_down();
         self.conversion_result()
     }
 
@@ -306,20 +310,28 @@ impl<I: AdcInstance, F> Adc<I, F> {
     fn read_buffer_blocking_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
-        self.enable_freerunning();
 
         self.disable_interrupts(Flags::all());
         self.mux(ch);
-        self.power_up();
+
+        // Discard any potentially old measurements still lingering in the buffer
+        let _discard = self.conversion_result();
+
+        self.enable_freerunning();
         self.start_conversion();
+
         for result in dst.iter_mut() {
             while !self.read_flags().contains(Flags::RESRDY) {
                 core::hint::spin_loop();
             }
             *result = self.conversion_result();
-            self.check_and_clear_flags(self.read_flags())?;
+
+            if let Err(e) = self.check_and_clear_flags(self.read_flags()) {
+                self.disable_freerunning();
+                return Err(e);
+            }
         }
-        self.power_down();
+
         self.disable_freerunning();
         Ok(())
     }
@@ -363,7 +375,7 @@ impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
         }
 
         let mut adc_val = self.read_blocking_channel(chan);
-        if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
+        if let Accumulation::Summed(sum) = self.cfg.accumulation {
             let div: u16 = 2u16.pow(sum as u32);
             adc_val /= div;
         }
@@ -392,16 +404,18 @@ where
     #[inline]
     async fn read_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
-        self.mux(ch);
-        self.power_up();
         let _ = self.check_and_clear_flags(self.read_flags());
+
+        self.mux(ch);
+
+        // Discard any potentially old measurements still lingering in the buffer
+        let _discard = self.conversion_result();
+
         self.start_conversion();
         // Here we explicitly ignore the result, because we know that
         // overrun errors are impossible since the ADC is configured in one-shot mode.
         let _ = self.wait_flags(Flags::RESRDY).await;
-        let result = self.conversion_result();
-        self.power_down();
-        result
+        self.conversion_result()
     }
 
     /// Read into a buffer from the provided ADC pin
@@ -418,18 +432,24 @@ where
     #[inline]
     async fn read_buffer_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
-        self.enable_freerunning();
+        let _ = self.check_and_clear_flags(self.read_flags());
 
         self.mux(ch);
-        self.power_up();
-        let _ = self.check_and_clear_flags(self.read_flags());
+
+        // Discard any potentially old measurements still lingering in the buffer
+        let _discard = self.conversion_result();
+
+        self.enable_freerunning();
         self.start_conversion();
+
         for result in dst.iter_mut() {
-            self.wait_flags(Flags::RESRDY).await?;
+            if let Err(e) = self.wait_flags(Flags::RESRDY).await {
+                self.disable_freerunning();
+                return Err(e);
+            }
             *result = self.conversion_result();
         }
 
-        self.power_down();
         self.disable_freerunning();
         Ok(())
     }

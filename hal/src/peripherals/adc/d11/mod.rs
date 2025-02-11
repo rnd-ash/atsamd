@@ -1,6 +1,8 @@
 use crate::typelevel::NoneT;
 
-use super::{Adc, AdcAccumulation, AdcInstance, Config, Error, Flags, PrimaryAdc};
+use super::{
+    Accumulation, Adc, AdcInstance, Config, Error, Flags, PrimaryAdc, Resolution, SampleCount,
+};
 
 use crate::{calibration, pac};
 use pac::adc::avgctrl::Samplenumselect;
@@ -9,6 +11,7 @@ use pac::adc::inputctrl::Gainselect;
 use pac::Peripherals;
 pub mod pin;
 
+/// Wrapper around the ADC instance
 pub struct Adc0 {
     _adc: pac::Adc,
 }
@@ -17,7 +20,6 @@ impl PrimaryAdc for Adc0 {}
 
 impl AdcInstance for Adc0 {
     type Instance = pac::Adc;
-    type Clock = crate::clock::AdcClock;
 
     #[cfg(feature = "async")]
     type Interrupt = crate::async_hal::interrupts::ADC;
@@ -57,64 +59,54 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         // This also disables the ADC
         self.software_reset();
         I::calibrate(&self.adc);
-        self.sync();
-        self.adc
-            .ctrlb()
-            .modify(|_, w| w.prescaler().variant(config.clk_divider));
-        self.sync();
-        self.adc
-            .ctrlb()
-            .modify(|_, w| w.ressel().variant(config.bit_width));
+
+        self.adc.ctrlb().modify(|_, w| {
+            w.prescaler().variant(config.clk_divider);
+            w.ressel().variant(config.bit_width)
+        });
         self.sync();
 
         self.adc
             .sampctrl()
             .modify(|_, w| unsafe { w.samplen().bits(config.sample_clock_cycles) }); // sample length
-        self.sync();
+
         self.adc.inputctrl().modify(|_, w| {
+            // No negative input (internal gnd)
             w.muxneg().gnd();
             w.gain().variant(Gainselect::Div2)
-        }); // No negative input (internal gnd)
+        });
         self.sync();
 
         // Check bit width selected
-        if config.accumulation != AdcAccumulation::Single
-            && config.bit_width != Resselselect::_16bit
-        {
+        if config.accumulation != Accumulation::Single && config.bit_width != Resolution::_16bit {
             return Err(super::Error::InvalidSampleBitWidth);
         }
-        match config.accumulation {
-            AdcAccumulation::Single => {
-                // 1 sample to be used as is
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(Samplenumselect::_1);
-                    unsafe { w.adjres().bits(0) }
-                });
-            }
-            AdcAccumulation::Average(adc_sample_count) => {
-                // A total of `adc_sample_count` elements will be averaged by the ADC
-                // before it returns the result
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(adc_sample_count);
-                    unsafe {
-                        // Table 45-3 SAME51 datasheet
-                        w.adjres()
-                            .bits(core::cmp::min(adc_sample_count as u8, 0x04))
-                    }
-                });
-            }
-            AdcAccumulation::Summed(adc_sample_count) => {
-                // A total of `adc_sample_count` elements will be summed by the ADC
-                // before it returns the result
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(adc_sample_count);
-                    unsafe { w.adjres().bits(0) }
-                });
-            }
-        }
 
+        let (sample_count, adjres) = match config.accumulation {
+            // 1 sample to be used as is
+            Accumulation::Single => (SampleCount::_1, 0),
+            // A total of `adc_sample_count` elements will be averaged by the ADC
+            // before it returns the result
+            // SAMD21 datasheet table 32-3 / SAMD11 datasheet table 31-3
+            Accumulation::Average(cnt) => (cnt, core::cmp::min(cnt as u8, 0x04)),
+            // A total of `adc_sample_count` elements will be summed by the ADC
+            // before it returns the result
+            Accumulation::Summed(cnt) => (cnt, 0),
+        };
+
+        self.adc.avgctrl().modify(|_, w| {
+            w.samplenum().variant(sample_count);
+            unsafe { w.adjres().bits(adjres) }
+        });
         self.sync();
+
         self.set_reference(config.vref);
+        self.sync();
+
+        self.disable_freerunning();
+
+        self.power_up();
+
         Ok(())
     }
 }
@@ -136,6 +128,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(super) fn power_down(&mut self) {
         self.adc.ctrla().modify(|_, w| w.enable().clear_bit());
         self.sync();
@@ -160,7 +153,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
 
     #[inline]
     pub(super) fn disable_freerunning(&mut self) {
-        self.adc.ctrlb().modify(|_, w| w.freerun().set_bit());
+        self.adc.ctrlb().modify(|_, w| w.freerun().clear_bit());
         self.sync();
     }
 

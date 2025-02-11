@@ -1,12 +1,12 @@
 pub mod pin;
 
-use pac::adc0::avgctrl::Samplenumselect;
-use pac::adc0::ctrlb::Resselselect;
-
-use super::{Adc, AdcAccumulation, AdcInstance, Config, Error, Flags, PrimaryAdc};
+use super::{
+    Accumulation, Adc, AdcInstance, Config, Error, Flags, PrimaryAdc, Resolution, SampleCount,
+};
 use crate::typelevel::NoneT;
 use crate::{calibration, pac};
 
+/// ADC instance 0
 pub struct Adc0 {
     _adc: pac::Adc0,
 }
@@ -43,6 +43,7 @@ impl AdcInstance for Adc0 {
     }
 }
 
+/// ADC instance 0
 pub struct Adc1 {
     _adc: pac::Adc1,
 }
@@ -101,43 +102,34 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         self.adc.inputctrl().modify(|_, w| w.muxneg().gnd()); // No negative input (internal gnd)
         self.sync();
         // Check bit width selected
-        if config.accumulation != AdcAccumulation::Single
-            && config.bit_width != Resselselect::_16bit
-        {
+        if config.accumulation != Accumulation::Single && config.bit_width != Resolution::_16bit {
             return Err(super::Error::InvalidSampleBitWidth);
         }
-        match config.accumulation {
-            AdcAccumulation::Single => {
-                // 1 sample to be used as is
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(Samplenumselect::_1);
-                    unsafe { w.adjres().bits(0) }
-                });
-            }
-            AdcAccumulation::Average(adc_sample_count) => {
-                // A total of `adc_sample_count` elements will be averaged by the ADC
-                // before it returns the result
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(adc_sample_count);
-                    unsafe {
-                        // Table 45-3 SAME51 datasheet
-                        w.adjres()
-                            .bits(core::cmp::min(adc_sample_count as u8, 0x04))
-                    }
-                });
-            }
-            AdcAccumulation::Summed(adc_sample_count) => {
-                // A total of `adc_sample_count` elements will be summed by the ADC
-                // before it returns the result
-                self.adc.avgctrl().modify(|_, w| {
-                    w.samplenum().variant(adc_sample_count);
-                    unsafe { w.adjres().bits(0) }
-                });
-            }
-        }
 
+        let (sample_cnt, adjres) = match config.accumulation {
+            // 1 sample to be used as is
+            Accumulation::Single => (SampleCount::_1, 0),
+            // A total of `adc_sample_count` elements will be averaged by the ADC
+            // before it returns the result
+            // Table 45-3 SAMx5x datasheet
+            Accumulation::Average(cnt) => (cnt, core::cmp::min(cnt as u8, 0x04)),
+            // A total of `adc_sample_count` elements will be summed by the ADC
+            // before it returns the result
+            Accumulation::Summed(cnt) => (cnt, 0),
+        };
+        self.adc.avgctrl().modify(|_, w| {
+            w.samplenum().variant(sample_cnt);
+            unsafe { w.adjres().bits(adjres) }
+        });
         self.sync();
+
         self.set_reference(config.vref);
+        self.sync();
+
+        self.disable_freerunning();
+
+        self.power_up();
+
         Ok(())
     }
 }
@@ -170,7 +162,7 @@ impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
         let mut tp = self.read_blocking_channel(0x1C) as f32;
         let mut tc = self.read_blocking_channel(0x1D) as f32;
 
-        if let AdcAccumulation::Summed(sum) = self.cfg.accumulation {
+        if let Accumulation::Summed(sum) = self.cfg.accumulation {
             // to prevent incorrect readings, divide by number of samples if the
             // ADC was already configured in summation mode
             let div: f32 = (2u16.pow(sum as u32)) as f32;
@@ -198,6 +190,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(super) fn power_down(&mut self) {
         self.adc.ctrla().modify(|_, w| w.enable().clear_bit());
         self.sync();
