@@ -35,7 +35,15 @@ fn cal_with_errata(
 
 /// ADC Linearity Calibration. Should be written to ADC CALIB register.
 pub fn adc_linearity_cal() -> u8 {
-    cal(3, 3, 0b1111_111) as u8
+    // Value in flash is bits 34:27, which spans a 32b boundary
+    
+    // bits 4:0
+    let low = cal(0, 27, 0x1F) as u8;
+
+    // bits 7:5
+    let high = cal(4, 0, 0x7) as u8;
+
+    high << 5 | low
 }
 
 /// ADC Bias Calibration. Should be written to ADC CALIB register.
