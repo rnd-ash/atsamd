@@ -45,7 +45,7 @@ pub fn adc_linearity_cal() -> u8 {
 
 /// ADC Bias Calibration. Should be written to ADC CALIB register.
 pub fn adc_bias_cal() -> u8 {
-    cal(1, 5, 0b11) as u8
+    cal(1, 3, 0b111) as u8
 }
 
 /// Returns the osc32k calibration value from the NVM calibration area
