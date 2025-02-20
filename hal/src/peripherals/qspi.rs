@@ -14,9 +14,36 @@ use crate::async_hal::interrupts::QSPI;
 pub enum Error {
     /// The command you selected cannot be performed by this function
     CommandFunctionMismatch,
+    /// Overrun error
+    Overrun,
 }
 
 // TODO - Move this async handler to another file
+
+bitflags::bitflags! {
+    /// QSPI interrupt flags
+    #[derive(Clone, Copy)]
+    pub struct Flags: u32 {
+        /// Receive data register full
+        const RXC = 1 << 0;
+        /// Transmit data register empty
+        const DRE = 1 << 1;
+        /// Transmit data complete
+        const TXC = 1 << 2;
+        /// Overrun error
+        const ERROR = 1 << 3;
+        /// Chip select rise
+        const CSRISE = 1 << 8;
+        /// Instruction end
+        const INSTREND = 1 << 10;
+    }
+}
+
+#[cfg(feature = "async")]
+use embassy_sync::waitqueue::AtomicWaker;
+#[allow(clippy::declare_interior_mutable_const)]
+#[cfg(feature = "async")]
+pub static QSPI_WAKER: AtomicWaker = AtomicWaker::new();
 
 #[cfg(feature = "async")]
 pub struct QspiInterruptHandler {}
@@ -25,7 +52,15 @@ impl crate::typelevel::Sealed for QspiInterruptHandler {}
 #[cfg(feature = "async")]
 impl Handler<QSPI> for QspiInterruptHandler {
     unsafe fn on_interrupt() {
-        todo!()
+        let peripherals = crate::pac::Peripherals::steal();
+        let qspi = peripherals.qspi;
+        let flags_pending = Flags::from_bits_truncate(qspi.intflag().read().bits());
+        let enabled_flags = Flags::from_bits_truncate(qspi.intenset().read().bits());
+        if enabled_flags.intersects(flags_pending) {
+            qspi.intenclr().write(|w| w.bits(flags_pending.bits()));
+            // Wake up!
+            QSPI_WAKER.wake();
+        }
     }
 }
 
@@ -329,9 +364,89 @@ impl Qspi<XIP> {
     }
 }
 
-impl Qspi<FutureOneShot> {
+#[cfg(feature = "async")]
+impl<F> Qspi<FutureOneShot, F>
+where
+    F: crate::async_hal::interrupts::Binding<QSPI, QspiInterruptHandler>,
+{
     async fn read() {}
     async fn write() {}
+
+    async unsafe fn finalize(&self) -> Result<(), Error> {
+        self.qspi.ctrla().write(|w| {
+            w.enable().set_bit();
+            w.lastxfer().set_bit()
+        });
+        self.wait_flags(Flags::INSTREND).await?;
+        self.wait_flags(Flags::CSRISE).await?;
+        Ok(())
+    }
+
+    #[inline]
+    fn disable_interrupts(&self, flags: Flags) {
+        unsafe { self.qspi.intenclr().write(|w| w.bits(flags.bits())) };
+    }
+
+    #[inline]
+    fn enable_interrupts(&self, flags: Flags) {
+        unsafe { self.qspi.intenset().write(|w| w.bits(flags.bits())) };
+    }
+
+    #[inline]
+    fn clear_flags(&self, flags: Flags) {
+        unsafe { self.qspi.intflag().write(|w| w.bits(flags.bits())) };
+    }
+
+    #[inline]
+    fn read_flags(&self) -> Flags {
+        Flags::from_bits_truncate(self.qspi.intflag().read().bits())
+    }
+
+    #[inline]
+    fn check_and_clear_flags(&self, flags: Flags) -> Result<(), Error> {
+        let flags_to_clear = flags;
+        self.clear_flags(flags_to_clear);
+        if flags.contains(Flags::ERROR) {
+            Err(Error::Overrun)
+        } else {
+            Ok(())
+        }
+    }
+
+    #[inline]
+    async fn wait_flags(&self, flags_to_wait: Flags) -> Result<(), Error> {
+        use core::task::Poll;
+
+        // We automatically check for errors
+        let flags_to_wait = flags_to_wait | Flags::ERROR;
+        self.disable_interrupts(Flags::all());
+
+        core::future::poll_fn(|cx| {
+            // Scope maybe_pending so we don't forget to re-poll the register later down.
+            {
+                let maybe_pending = self.read_flags();
+                if flags_to_wait.intersects(maybe_pending) {
+                    let result = self.check_and_clear_flags(maybe_pending);
+                    self.disable_interrupts(flags_to_wait);
+                    return Poll::Ready(result);
+                }
+            }
+
+            QSPI_WAKER.register(cx.waker());
+            self.enable_interrupts(flags_to_wait);
+
+            let maybe_pending = self.read_flags();
+
+            if !flags_to_wait.intersects(maybe_pending) {
+                Poll::Pending
+            } else {
+                let result = self.check_and_clear_flags(maybe_pending);
+                self.disable_interrupts(flags_to_wait);
+                Poll::Ready(result)
+            }
+        })
+        .await
+    }
 }
 
 // (Mostly internal) methods available for sync modes.
