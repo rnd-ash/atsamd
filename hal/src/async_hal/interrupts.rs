@@ -199,6 +199,10 @@ seq_macro::seq!(N in 0..= 15 {
     }
 });
 
+// -- QSPI interrupt -- //
+#[hal_cfg("qspi")]
+declare_interrupts!(QSPI);
+
 /// An interrupt source that may have one or many interrupt bindings.
 ///
 /// This trait may implemented directly when multiple interrupt sources are
