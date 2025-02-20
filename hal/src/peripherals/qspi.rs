@@ -1,9 +1,13 @@
 use crate::{
+    async_hal::interrupts::Handler,
     gpio::{AlternateH, AnyPin, Pin, PA08, PA09, PA10, PA11, PB10, PB11},
-    pac::qspi::instrframe,
-    pac::{self, Mclk},
+    pac::{self, qspi::instrframe, Mclk},
+    typelevel::NoneT,
 };
 use core::marker::PhantomData;
+
+#[cfg(feature = "async")]
+use crate::async_hal::interrupts::QSPI;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -12,12 +16,28 @@ pub enum Error {
     CommandFunctionMismatch,
 }
 
+// TODO - Move this async handler to another file
+
+#[cfg(feature = "async")]
+pub struct QspiInterruptHandler {}
+#[cfg(feature = "async")]
+impl crate::typelevel::Sealed for QspiInterruptHandler {}
+#[cfg(feature = "async")]
+impl Handler<QSPI> for QspiInterruptHandler {
+    unsafe fn on_interrupt() {
+        todo!()
+    }
+}
+
+/// Qspi used for async read/write
+pub struct FutureOneShot;
+
 /// Qspi used for read/write of fixed-size octet buffers
 pub struct OneShot;
 /// Qspi is memory-mapped as read/execute
 pub struct XIP;
 
-pub struct Qspi<MODE> {
+pub struct Qspi<MODE, F = NoneT> {
     qspi: pac::Qspi,
     _sck: Pin<PB10, AlternateH>,
     _cs: Pin<PB11, AlternateH>,
@@ -26,6 +46,7 @@ pub struct Qspi<MODE> {
     _io2: Pin<PA10, AlternateH>,
     _io3: Pin<PA11, AlternateH>,
     _mode: PhantomData<MODE>,
+    _irqs: PhantomData<F>,
 }
 
 impl Qspi<OneShot> {
@@ -85,6 +106,7 @@ impl Qspi<OneShot> {
             _io2,
             _io3,
             _mode: PhantomData,
+            _irqs: PhantomData,
         }
     }
 
@@ -212,11 +234,34 @@ impl Qspi<OneShot> {
         unsafe { self.run_write_instruction(Command::QuadPageProgram, tfm, addr, buf) };
     }
 
+    #[cfg(feature = "async")]
+    pub fn into_future<F>(self, _irq: F) -> Qspi<FutureOneShot, F>
+    where
+        F: crate::async_hal::interrupts::Binding<QSPI, QspiInterruptHandler>,
+    {
+        use crate::async_hal::interrupts::Interrupt;
+        unsafe {
+            QSPI::unpend();
+            QSPI::enable();
+        }
+        Qspi {
+            qspi: self.qspi,
+            _sck: self._sck,
+            _cs: self._cs,
+            _io0: self._io0,
+            _io1: self._io1,
+            _io2: self._io2,
+            _io3: self._io3,
+            _mode: PhantomData,
+            _irqs: PhantomData,
+        }
+    }
+
     /// Latches the peripheral in a read/execute state, so it can be used to
     /// read or execute directly from flash.
     ///
     /// Note: Hardcodes 8 dummy cycles.
-    pub fn into_xip(self) -> Qspi<XIP> {
+    pub fn into_xip(self) -> Qspi<XIP, NoneT> {
         let tfm = TransferMode {
             quad_width: true,
             address_enable: true,
@@ -238,6 +283,7 @@ impl Qspi<OneShot> {
             _io2: self._io2,
             _io3: self._io3,
             _mode: PhantomData,
+            _irqs: PhantomData,
         }
     }
 
@@ -266,7 +312,7 @@ impl Qspi<OneShot> {
 impl Qspi<XIP> {
     /// Latches the peripheral in a read/execute state, so it can be used to
     /// read or execute directly from flash.
-    pub fn into_oneshot(self) -> Qspi<OneShot> {
+    pub fn into_oneshot(self) -> Qspi<OneShot, NoneT> {
         unsafe { self.finalize() };
 
         Qspi::<OneShot> {
@@ -278,12 +324,18 @@ impl Qspi<XIP> {
             _io2: self._io2,
             _io3: self._io3,
             _mode: PhantomData,
+            _irqs: PhantomData,
         }
     }
 }
 
-// (Mostly internal) methods available in any mode.
-impl<MODE> Qspi<MODE> {
+impl Qspi<FutureOneShot> {
+    async fn read() {}
+    async fn write() {}
+}
+
+// (Mostly internal) methods available for sync modes.
+impl<MODE> Qspi<MODE, NoneT> {
     unsafe fn finalize(&self) {
         self.qspi.ctrla().write(|w| {
             w.enable().set_bit();
