@@ -7,6 +7,10 @@ use crate::{
 use core::marker::PhantomData;
 
 #[cfg(feature = "async")]
+pub mod async_api;
+#[cfg(feature = "async")]
+pub use async_api::*;
+#[cfg(feature = "async")]
 use crate::async_hal::interrupts::QSPI;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -36,31 +40,6 @@ bitflags::bitflags! {
         const CSRISE = 1 << 8;
         /// Instruction end
         const INSTREND = 1 << 10;
-    }
-}
-
-#[cfg(feature = "async")]
-use embassy_sync::waitqueue::AtomicWaker;
-#[allow(clippy::declare_interior_mutable_const)]
-#[cfg(feature = "async")]
-pub static QSPI_WAKER: AtomicWaker = AtomicWaker::new();
-
-#[cfg(feature = "async")]
-pub struct QspiInterruptHandler {}
-#[cfg(feature = "async")]
-impl crate::typelevel::Sealed for QspiInterruptHandler {}
-#[cfg(feature = "async")]
-impl Handler<QSPI> for QspiInterruptHandler {
-    unsafe fn on_interrupt() {
-        let peripherals = crate::pac::Peripherals::steal();
-        let qspi = peripherals.qspi;
-        let flags_pending = Flags::from_bits_truncate(qspi.intflag().read().bits());
-        let enabled_flags = Flags::from_bits_truncate(qspi.intenset().read().bits());
-        if enabled_flags.intersects(flags_pending) {
-            qspi.intenclr().write(|w| w.bits(flags_pending.bits()));
-            // Wake up!
-            QSPI_WAKER.wake();
-        }
     }
 }
 
@@ -274,7 +253,7 @@ impl Qspi<OneShot> {
     where
         F: crate::async_hal::interrupts::Binding<QSPI, QspiInterruptHandler>,
     {
-        use crate::async_hal::interrupts::Interrupt;
+        use crate::async_hal::interrupts::{Interrupt, QSPI};
         unsafe {
             QSPI::unpend();
             QSPI::enable();
