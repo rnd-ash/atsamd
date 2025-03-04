@@ -39,7 +39,7 @@ fn main() -> ! {
 
     let adc_settings = Config::new()
         .clock_cycles_per_sample(5)
-        .clock_divider(Prescaler::Div32)
+        .clock_divider(Prescaler::Div64)
         .sample_resolution(Resolution::_12bit)
         .accumulation_method(Accumulation::Single);
 

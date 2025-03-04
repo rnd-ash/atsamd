@@ -316,21 +316,26 @@ impl<I: AdcInstance, F> Adc<I, F> {
         self.mux(ch);
 
         self.enable_freerunning();
+        self.power_up();
         self.start_conversion();
 
         for result in dst.iter_mut() {
             while !self.read_flags().contains(Flags::RESRDY) {
                 core::hint::spin_loop();
             }
-            *result = self.conversion_result();
 
             if let Err(e) = self.check_and_clear_flags(self.read_flags()) {
+                self.power_down();
                 self.disable_freerunning();
+
                 return Err(e);
             }
-        }
 
+            *result = self.conversion_result();
+        }
+        self.power_down();
         self.disable_freerunning();
+
         Ok(())
     }
 
@@ -435,17 +440,22 @@ where
         self.mux(ch);
 
         self.enable_freerunning();
+        self.power_up();
         self.start_conversion();
 
         for result in dst.iter_mut() {
             if let Err(e) = self.wait_flags(Flags::RESRDY).await {
+                self.power_down();
                 self.disable_freerunning();
+
                 return Err(e);
             }
             *result = self.conversion_result();
         }
 
+        self.power_down();
         self.disable_freerunning();
+
         Ok(())
     }
 }
