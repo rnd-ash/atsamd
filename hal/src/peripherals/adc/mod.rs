@@ -281,18 +281,18 @@ impl<I: AdcInstance, F> Adc<I, F> {
     fn read_blocking_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
-
         self.disable_interrupts(Flags::all());
+        self.disable_freerunning();
+        self.sync();
         self.mux(ch);
-
-        // Discard any potentially old measurements still lingering in the buffer
-        let _discard = self.conversion_result();
-
+        self.power_up();
         self.start_conversion();
         while !self.read_flags().contains(Flags::RESRDY) {
             core::hint::spin_loop();
         }
-        self.conversion_result()
+        let res = self.conversion_result();
+        self.power_down();
+        res
     }
 
     /// Read into a buffer from the provided ADC pin, in a blocking fashion
@@ -313,9 +313,6 @@ impl<I: AdcInstance, F> Adc<I, F> {
 
         self.disable_interrupts(Flags::all());
         self.mux(ch);
-
-        // Discard any potentially old measurements still lingering in the buffer
-        let _discard = self.conversion_result();
 
         self.enable_freerunning();
         self.start_conversion();
@@ -405,17 +402,17 @@ where
     async fn read_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
-
+        self.disable_freerunning();
         self.mux(ch);
-
-        // Discard any potentially old measurements still lingering in the buffer
-        let _discard = self.conversion_result();
-
+        self.power_up();
         self.start_conversion();
         // Here we explicitly ignore the result, because we know that
         // overrun errors are impossible since the ADC is configured in one-shot mode.
         let _ = self.wait_flags(Flags::RESRDY).await;
-        self.conversion_result()
+        let res = self.conversion_result();
+        self.power_down();
+        self.sync();
+        res
     }
 
     /// Read into a buffer from the provided ADC pin
@@ -435,9 +432,6 @@ where
         let _ = self.check_and_clear_flags(self.read_flags());
 
         self.mux(ch);
-
-        // Discard any potentially old measurements still lingering in the buffer
-        let _discard = self.conversion_result();
 
         self.enable_freerunning();
         self.start_conversion();
