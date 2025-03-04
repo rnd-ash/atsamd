@@ -84,6 +84,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         // Reset ADC here as we cannot guarantee its state
         // This also disables the ADC
         self.software_reset();
+        self.sync();
         I::calibrate(&self.adc);
         self.sync();
         self.adc
@@ -99,8 +100,12 @@ impl<I: AdcInstance> Adc<I, NoneT> {
             .sampctrl()
             .modify(|_, w| unsafe { w.samplen().bits(config.sample_clock_cycles) }); // sample length
         self.sync();
-        self.adc.inputctrl().modify(|_, w| w.muxneg().gnd()); // No negative input (internal gnd)
+        self.adc.inputctrl().modify(|_, w| {
+            w.muxneg().gnd();
+            w.diffmode().clear_bit()
+        }); // No negative input (internal gnd)
         self.sync();
+
         // Check bit width selected
         if config.accumulation != Accumulation::Single && config.bit_width != Resolution::_16bit {
             return Err(super::Error::InvalidSampleBitWidth);
@@ -204,6 +209,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
         // right after changing VREF value
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
         self.sync();
+        self.adc.intflag().write(|w| w.resrdy().set_bit()); // Clear RESRDY
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
     }
 

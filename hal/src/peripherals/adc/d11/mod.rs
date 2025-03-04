@@ -36,11 +36,9 @@ impl AdcInstance for Adc0 {
 
     #[inline]
     fn calibrate(instance: &Self::Instance) {
-        instance.calib().write(|w| {
-            unsafe {
-                w.bias_cal().bits(calibration::adc_bias_cal());
-                w.linearity_cal().bits(calibration::adc_linearity_cal())
-            }
+        instance.calib().write(|w| unsafe {
+            w.bias_cal().bits(calibration::adc_bias_cal());
+            w.linearity_cal().bits(calibration::adc_linearity_cal())
         });
     }
 
@@ -142,6 +140,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
         // right after changing VREF value
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
         self.sync();
+        self.adc.intflag().write(|w| w.resrdy().set_bit()); // Clear RESRDY
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
     }
 
