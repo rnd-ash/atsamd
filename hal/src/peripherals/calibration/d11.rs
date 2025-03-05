@@ -31,6 +31,7 @@ fn cal_with_errata(
 }
 
 /// ADC Linearity Calibration. Should be written to ADC CALIB register.
+#[allow(clippy::unusual_byte_groupings)]
 pub fn adc_linearity_cal() -> u8 {
     // Value in flash is bits 34:27, which spans a 32b boundary
     

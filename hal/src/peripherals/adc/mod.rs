@@ -156,8 +156,8 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     /// ## Important
     ///
     /// This function will return `Err` if the clock source provided
-    /// is faster than 100 MHz, since this is the maximum frequency for GCLK_ADCx
-    /// as per the datasheet.
+    /// is faster than 100 MHz, since this is the maximum frequency for
+    /// GCLK_ADCx as per the datasheet.
     ///
     /// The [`new`](Self::new) function currently takes an `&` reference to a
     /// [`Pclk`](crate::clock::v2::pclk::Pclk). In the future this will likely
@@ -174,13 +174,14 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         clk: crate::clock::v2::apb::ApbClk<I::ClockId>,
         pclk: &crate::clock::v2::pclk::Pclk<I::ClockId, PS>,
     ) -> Result<Self, Error> {
-        // TODO: Ideally, the ADC struct would take ownership of the Pclk type here. However, since
-        // clock::v2 is not implemented for all chips yet, the generics for the Adc type would be
-        // different between chip families, leading to massive and unnecessary code duplication. In
-        // the meantime, we use a "lite" variation of the typelevel guarantees laid out by the
-        // clock::v2 module, meaning that we can guarantee that the clocks are enabled at the time
-        // of creation of the Adc struct; however we can't guarantee that the clock will stay
-        // enabled for the duration of its lifetime.
+        // TODO: Ideally, the ADC struct would take ownership of the Pclk type here.
+        // However, since clock::v2 is not implemented for all chips yet, the
+        // generics for the Adc type would be different between chip families,
+        // leading to massive and unnecessary code duplication. In the meantime,
+        // we use a "lite" variation of the typelevel guarantees laid out by the
+        // clock::v2 module, meaning that we can guarantee that the clocks are enabled
+        // at the time of creation of the Adc struct; however we can't guarantee
+        // that the clock will stay enabled for the duration of its lifetime.
 
         if pclk.freq() > fugit::HertzU32::from_raw(100_000_000) {
             // Clock source is too fast
@@ -315,21 +316,26 @@ impl<I: AdcInstance, F> Adc<I, F> {
         self.mux(ch);
 
         self.enable_freerunning();
+        self.power_up();
         self.start_conversion();
 
         for result in dst.iter_mut() {
             while !self.read_flags().contains(Flags::RESRDY) {
                 core::hint::spin_loop();
             }
-            *result = self.conversion_result();
 
             if let Err(e) = self.check_and_clear_flags(self.read_flags()) {
+                self.power_down();
                 self.disable_freerunning();
+
                 return Err(e);
             }
-        }
 
+            *result = self.conversion_result();
+        }
+        self.power_down();
         self.disable_freerunning();
+
         Ok(())
     }
 
@@ -434,17 +440,22 @@ where
         self.mux(ch);
 
         self.enable_freerunning();
+        self.power_up();
         self.start_conversion();
 
         for result in dst.iter_mut() {
             if let Err(e) = self.wait_flags(Flags::RESRDY).await {
+                self.power_down();
                 self.disable_freerunning();
+
                 return Err(e);
             }
             *result = self.conversion_result();
         }
 
+        self.power_down();
         self.disable_freerunning();
+
         Ok(())
     }
 }

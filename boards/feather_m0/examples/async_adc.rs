@@ -42,7 +42,8 @@ async fn main(_s: embassy_executor::Spawner) -> ! {
 
     let adc_settings = Config::new()
         .clock_cycles_per_sample(5)
-        .clock_divider(Prescaler::Div32)
+        // Overruns if clock divider < 128 in debug mode
+        .clock_divider(Prescaler::Div128)
         .sample_resolution(Resolution::_12bit)
         .accumulation_method(Accumulation::Single);
 

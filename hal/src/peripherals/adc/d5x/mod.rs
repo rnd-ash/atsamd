@@ -221,7 +221,7 @@ impl<I: AdcInstance, T> Adc<I, T> {
 
     #[inline]
     pub(super) fn disable_freerunning(&mut self) {
-        self.adc.ctrlb().modify(|_, w| w.freerun().set_bit());
+        self.adc.ctrlb().modify(|_, w| w.freerun().clear_bit());
         self.sync();
     }
 

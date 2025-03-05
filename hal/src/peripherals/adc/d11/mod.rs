@@ -5,8 +5,6 @@ use super::{
 };
 
 use crate::{calibration, pac};
-use pac::adc::avgctrl::Samplenumselect;
-use pac::adc::ctrlb::Resselselect;
 use pac::adc::inputctrl::Gainselect;
 use pac::Peripherals;
 pub mod pin;
