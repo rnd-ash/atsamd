@@ -31,6 +31,7 @@ Copyright (c) 2017 Microchip Technology Inc.
       <endian>selectable</endian>
       <mpuPresent>true</mpuPresent>
       <fpuPresent>false</fpuPresent>
+      <vtorPresent>true</vtorPresent>
       <nvicPrioBits>2</nvicPrioBits>
       <vendorSystickConfig>false</vendorSystickConfig>
    </cpu>
@@ -1512,7 +1513,7 @@ Copyright (c) 2017 Microchip Technology Inc.
       </peripheral>
       <peripheral>
          <name>CCL</name>
-         <version>U22251.0.1</version>
+         <version>U22251.1.0</version>
          <description>Configurable Custom Logic</description>
          <groupName>CCL</groupName>
          <prependToName>CCL_</prependToName>
@@ -1535,18 +1536,57 @@ Copyright (c) 2017 Microchip Technology Inc.
                      <description>Software Reset</description>
                      <bitOffset>0</bitOffset>
                      <bitWidth>1</bitWidth>
+                     <enumeratedValues>
+                        <name>SWRSTSelect</name>
+                        <enumeratedValue>
+                           <name>DISABLE</name>
+                           <description>The peripheral is not reset</description>
+                           <value>0</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>ENABLE</name>
+                           <description>The peripheral is reset</description>
+                           <value>1</value>
+                        </enumeratedValue>
+                     </enumeratedValues>
                   </field>
                   <field>
                      <name>ENABLE</name>
                      <description>Enable</description>
                      <bitOffset>1</bitOffset>
                      <bitWidth>1</bitWidth>
+                     <enumeratedValues>
+                        <name>ENABLESelect</name>
+                        <enumeratedValue>
+                           <name>DISABLE</name>
+                           <description>The peripheral is disabled</description>
+                           <value>0</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>ENABLE</name>
+                           <description>The peripheral is enabled</description>
+                           <value>1</value>
+                        </enumeratedValue>
+                     </enumeratedValues>
                   </field>
                   <field>
                      <name>RUNSTDBY</name>
-                     <description>Run during Standby</description>
+                     <description>Run in Standby</description>
                      <bitOffset>6</bitOffset>
                      <bitWidth>1</bitWidth>
+                     <enumeratedValues>
+                        <name>RUNSTDBYSelect</name>
+                        <enumeratedValue>
+                           <name>DISABLE</name>
+                           <description>Generic clock is not required in standby sleep mode</description>
+                           <value>0</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>ENABLE</name>
+                           <description>Generic clock is  required in standby sleep mode</description>
+                           <value>1</value>
+                        </enumeratedValue>
+                     </enumeratedValues>
                   </field>
                </fields>
             </register>
@@ -1609,6 +1649,19 @@ Copyright (c) 2017 Microchip Technology Inc.
                      <description>LUT Enable</description>
                      <bitOffset>1</bitOffset>
                      <bitWidth>1</bitWidth>
+                     <enumeratedValues>
+                        <name>ENABLESelect</name>
+                        <enumeratedValue>
+                           <name>DISABLE</name>
+                           <description>LUT block is disabled</description>
+                           <value>0</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>ENABLE</name>
+                           <description>LUT block is enabled</description>
+                           <value>1</value>
+                        </enumeratedValue>
+                     </enumeratedValues>
                   </field>
                   <field>
                      <name>FILTSEL</name>
@@ -1639,6 +1692,19 @@ Copyright (c) 2017 Microchip Technology Inc.
                      <description>Edge Selection</description>
                      <bitOffset>7</bitOffset>
                      <bitWidth>1</bitWidth>
+                     <enumeratedValues>
+                        <name>EDGESELSelect</name>
+                        <enumeratedValue>
+                           <name>DISABLE</name>
+                           <description>Edge detector is disabled</description>
+                           <value>0</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>ENABLE</name>
+                           <description>Edge detector is enabled</description>
+                           <value>1</value>
+                        </enumeratedValue>
+                     </enumeratedValues>
                   </field>
                   <field>
                      <name>INSEL0</name>
@@ -1664,7 +1730,7 @@ Copyright (c) 2017 Microchip Technology Inc.
                         </enumeratedValue>
                         <enumeratedValue>
                            <name>EVENT</name>
-                           <description>Event in put source</description>
+                           <description>Event input source</description>
                            <value>3</value>
                         </enumeratedValue>
                         <enumeratedValue>
@@ -1688,13 +1754,8 @@ Copyright (c) 2017 Microchip Technology Inc.
                            <value>7</value>
                         </enumeratedValue>
                         <enumeratedValue>
-                           <name>TCC</name>
-                           <description>TCC input source</description>
-                           <value>8</value>
-                        </enumeratedValue>
-                        <enumeratedValue>
                            <name>SERCOM</name>
-                           <description>SERCOM inout source</description>
+                           <description>SERCOM input source</description>
                            <value>9</value>
                         </enumeratedValue>
                      </enumeratedValues>
@@ -1704,30 +1765,165 @@ Copyright (c) 2017 Microchip Technology Inc.
                      <description>Input Selection 1</description>
                      <bitOffset>12</bitOffset>
                      <bitWidth>4</bitWidth>
+                     <enumeratedValues>
+                        <name>INSEL1Select</name>
+                        <enumeratedValue>
+                           <name>MASK</name>
+                           <description>Masked input</description>
+                           <value>0</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>FEEDBACK</name>
+                           <description>Feedback input source</description>
+                           <value>1</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>LINK</name>
+                           <description>Linked LUT input source</description>
+                           <value>2</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>EVENT</name>
+                           <description>Event input source</description>
+                           <value>3</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>IO</name>
+                           <description>I/O pin input source</description>
+                           <value>4</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>AC</name>
+                           <description>AC input source</description>
+                           <value>5</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>TC</name>
+                           <description>TC input source</description>
+                           <value>6</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>ALTTC</name>
+                           <description>Alternate TC input source</description>
+                           <value>7</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>SERCOM</name>
+                           <description>SERCOM input source</description>
+                           <value>9</value>
+                        </enumeratedValue>
+                     </enumeratedValues>
                   </field>
                   <field>
                      <name>INSEL2</name>
                      <description>Input Selection 2</description>
                      <bitOffset>16</bitOffset>
                      <bitWidth>4</bitWidth>
+                     <enumeratedValues>
+                        <name>INSEL2Select</name>
+                        <enumeratedValue>
+                           <name>MASK</name>
+                           <description>Masked input</description>
+                           <value>0</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>FEEDBACK</name>
+                           <description>Feedback input source</description>
+                           <value>1</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>LINK</name>
+                           <description>Linked LUT input source</description>
+                           <value>2</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>EVENT</name>
+                           <description>Event input source</description>
+                           <value>3</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>IO</name>
+                           <description>I/O pin input source</description>
+                           <value>4</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>AC</name>
+                           <description>AC input source</description>
+                           <value>5</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>TC</name>
+                           <description>TC input source</description>
+                           <value>6</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>ALTTC</name>
+                           <description>Alternate TC input source</description>
+                           <value>7</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>SERCOM</name>
+                           <description>SERCOM input source</description>
+                           <value>9</value>
+                        </enumeratedValue>
+                     </enumeratedValues>
                   </field>
                   <field>
                      <name>INVEI</name>
-                     <description>Input Event Invert</description>
+                     <description>Inverted Event Input Enable</description>
                      <bitOffset>20</bitOffset>
                      <bitWidth>1</bitWidth>
+                     <enumeratedValues>
+                        <name>INVEISelect</name>
+                        <enumeratedValue>
+                           <name>DISABLE</name>
+                           <description>Incoming event is not inverted</description>
+                           <value>0</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>ENABLE</name>
+                           <description>Incoming event is inverted</description>
+                           <value>1</value>
+                        </enumeratedValue>
+                     </enumeratedValues>
                   </field>
                   <field>
                      <name>LUTEI</name>
-                     <description>Event Input Enable</description>
+                     <description>LUT Event Input Enable</description>
                      <bitOffset>21</bitOffset>
                      <bitWidth>1</bitWidth>
+                     <enumeratedValues>
+                        <name>LUTEISelect</name>
+                        <enumeratedValue>
+                           <name>DISABLE</name>
+                           <description>LUT incoming event is disabled</description>
+                           <value>0</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>ENABLE</name>
+                           <description>LUT incoming event is enabled</description>
+                           <value>1</value>
+                        </enumeratedValue>
+                     </enumeratedValues>
                   </field>
                   <field>
                      <name>LUTEO</name>
-                     <description>Event Output Enable</description>
+                     <description>LUT Event Output Enable</description>
                      <bitOffset>22</bitOffset>
                      <bitWidth>1</bitWidth>
+                     <enumeratedValues>
+                        <name>LUTEOSelect</name>
+                        <enumeratedValue>
+                           <name>DISABLE</name>
+                           <description>LUT event output is disabled</description>
+                           <value>0</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>ENABLE</name>
+                           <description>LUT event output is enabled</description>
+                           <value>1</value>
+                        </enumeratedValue>
+                     </enumeratedValues>
                   </field>
                   <field>
                      <name>TRUTH</name>
@@ -7174,7 +7370,7 @@ Copyright (c) 2017 Microchip Technology Inc.
                      <name>CACHEDIS</name>
                      <description>Cache Disable</description>
                      <bitOffset>18</bitOffset>
-                     <bitWidth>2</bitWidth>
+                     <bitWidth>1</bitWidth>
                   </field>
                </fields>
             </register>
@@ -8581,44 +8777,39 @@ Copyright (c) 2017 Microchip Technology Inc.
                      <enumeratedValues>
                         <name>STARTUPSelect</name>
                         <enumeratedValue>
-                           <name>CYCLE1</name>
-                           <description>0.122 ms</description>
-                           <value>0</value>
-                        </enumeratedValue>
-                        <enumeratedValue>
-                           <name>CYCLE32</name>
-                           <description>1.068 ms</description>
-                           <value>1</value>
-                        </enumeratedValue>
-                        <enumeratedValue>
                            <name>CYCLE2048</name>
-                           <description>62.6 ms</description>
-                           <value>2</value>
+                           <description>62.5 ms</description>
+                           <value>0</value>
                         </enumeratedValue>
                         <enumeratedValue>
                            <name>CYCLE4096</name>
                            <description>125 ms</description>
-                           <value>3</value>
+                           <value>1</value>
                         </enumeratedValue>
                         <enumeratedValue>
                            <name>CYCLE16384</name>
                            <description>500 ms</description>
-                           <value>4</value>
+                           <value>2</value>
                         </enumeratedValue>
                         <enumeratedValue>
                            <name>CYCLE32768</name>
                            <description>1000 ms</description>
-                           <value>5</value>
+                           <value>3</value>
                         </enumeratedValue>
                         <enumeratedValue>
                            <name>CYCLE65536</name>
                            <description>2000 ms</description>
-                           <value>6</value>
+                           <value>4</value>
                         </enumeratedValue>
                         <enumeratedValue>
                            <name>CYCLE131072</name>
                            <description>4000 ms</description>
-                           <value>7</value>
+                           <value>5</value>
+                        </enumeratedValue>
+                        <enumeratedValue>
+                           <name>CYCLE262144</name>
+                           <description>8000 ms</description>
+                           <value>6</value>
                         </enumeratedValue>
                      </enumeratedValues>
                   </field>
@@ -9460,18 +9651,8 @@ Copyright (c) 2017 Microchip Technology Inc.
                      <enumeratedValues>
                         <name>SLEEPMODESelect</name>
                         <enumeratedValue>
-                           <name>IDLE0</name>
-                           <description>CPU clock is OFF</description>
-                           <value>0</value>
-                        </enumeratedValue>
-                        <enumeratedValue>
-                           <name>IDLE1</name>
-                           <description>AHB clock is OFF</description>
-                           <value>1</value>
-                        </enumeratedValue>
-                        <enumeratedValue>
-                           <name>IDLE2</name>
-                           <description>APB clock are OFF</description>
+                           <name>IDLE</name>
+                           <description>CPU, AHBx, and APBx clocks are OFF</description>
                            <value>2</value>
                         </enumeratedValue>
                         <enumeratedValue>
@@ -9804,12 +9985,108 @@ Copyright (c) 2017 Microchip Technology Inc.
                         <description>Peripheral Multiplexing for Even-Numbered Pin</description>
                         <bitOffset>0</bitOffset>
                         <bitWidth>4</bitWidth>
+                        <enumeratedValues>
+                           <name>PMUXESelect</name>
+                           <enumeratedValue>
+                              <name>A</name>
+                              <description>Peripheral function A selected</description>
+                              <value>0x0</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>B</name>
+                              <description>Peripheral function B selected</description>
+                              <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>C</name>
+                              <description>Peripheral function C selected</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>D</name>
+                              <description>Peripheral function D selected</description>
+                              <value>0x3</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>E</name>
+                              <description>Peripheral function E selected</description>
+                              <value>0x4</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>F</name>
+                              <description>Peripheral function F selected</description>
+                              <value>0x5</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>G</name>
+                              <description>Peripheral function G selected</description>
+                              <value>0x6</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>H</name>
+                              <description>Peripheral function H selected</description>
+                              <value>0x7</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>I</name>
+                              <description>Peripheral function I selected</description>
+                              <value>0x8</value>
+                           </enumeratedValue>
+                        </enumeratedValues>
                      </field>
                      <field>
                         <name>PMUXO</name>
                         <description>Peripheral Multiplexing for Odd-Numbered Pin</description>
                         <bitOffset>4</bitOffset>
                         <bitWidth>4</bitWidth>
+                        <enumeratedValues>
+                           <name>PMUXOSelect</name>
+                           <enumeratedValue>
+                              <name>A</name>
+                              <description>Peripheral function A selected</description>
+                              <value>0x0</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>B</name>
+                              <description>Peripheral function B selected</description>
+                              <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>C</name>
+                              <description>Peripheral function C selected</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>D</name>
+                              <description>Peripheral function D selected</description>
+                              <value>0x3</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>E</name>
+                              <description>Peripheral function E selected</description>
+                              <value>0x4</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>F</name>
+                              <description>Peripheral function F selected</description>
+                              <value>0x5</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>G</name>
+                              <description>Peripheral function G selected</description>
+                              <value>0x6</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>H</name>
+                              <description>Peripheral function H selected</description>
+                              <value>0x7</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>I</name>
+                              <description>Peripheral function I selected</description>
+                              <value>0x8</value>
+                           </enumeratedValue>
+                        </enumeratedValues>
                      </field>
                   </fields>
                </register>
@@ -10529,52 +10806,52 @@ Copyright (c) 2017 Microchip Technology Inc.
                            <enumeratedValue>
                               <name>OFF</name>
                               <description>CLK_RTC_CNT = GCLK_RTC/1</description>
-                              <value>0</value>
+                              <value>0x0</value>
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>DIV1</name>
                               <description>CLK_RTC_CNT = GCLK_RTC/1</description>
-                              <value>1</value>
+                              <value>0x1</value>
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>DIV2</name>
                               <description>CLK_RTC_CNT = GCLK_RTC/2</description>
-                              <value>2</value>
+                              <value>0x2</value>
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>DIV4</name>
                               <description>CLK_RTC_CNT = GCLK_RTC/4</description>
-                              <value>3</value>
+                              <value>0x3</value>
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>DIV8</name>
                               <description>CLK_RTC_CNT = GCLK_RTC/8</description>
-                              <value>4</value>
+                              <value>0x4</value>
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>DIV16</name>
                               <description>CLK_RTC_CNT = GCLK_RTC/16</description>
-                              <value>5</value>
+                              <value>0x5</value>
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>DIV32</name>
                               <description>CLK_RTC_CNT = GCLK_RTC/32</description>
-                              <value>6</value>
+                              <value>0x6</value>
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>DIV64</name>
                               <description>CLK_RTC_CNT = GCLK_RTC/64</description>
-                              <value>7</value>
+                              <value>0x7</value>
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>DIV128</name>
                               <description>CLK_RTC_CNT = GCLK_RTC/128</description>
-                              <value>8</value>
+                              <value>0x8</value>
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>DIV256</name>
                               <description>CLK_RTC_CNT = GCLK_RTC/256</description>
-                              <value>9</value>
+                              <value>0x9</value>
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>DIV512</name>
@@ -13796,13 +14073,23 @@ Copyright (c) 2017 Microchip Technology Inc.
                            <name>TXPOSelect</name>
                            <enumeratedValue>
                               <name>PAD0</name>
-                              <description>SERCOM PAD[0] is used for data transmission</description>
+                              <description>PAD[0] = TxD; PAD[1] = XCK</description>
                               <value>0x0</value>
                            </enumeratedValue>
                            <enumeratedValue>
-                              <name>PAD2</name>
-                              <description>SERCOM PAD[2] is used for data transmission</description>
+                              <name>PAD1</name>
+                              <description>PAD[2] = TxD; PAD[3] = XCK</description>
                               <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>PAD2</name>
+                              <description>PAD[0] = TxD; PAD[2] = RTS; PAD[3] = CTS</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>PAD3</name>
+                              <description>PAD[0] = TxD; PAD[1] = XCK; PAD[2] = TE</description>
+                              <value>0x3</value>
                            </enumeratedValue>
                         </enumeratedValues>
                      </field>
@@ -13840,6 +14127,29 @@ Copyright (c) 2017 Microchip Technology Inc.
                         <description>Sample Adjustment</description>
                         <bitOffset>22</bitOffset>
                         <bitWidth>2</bitWidth>
+                        <enumeratedValues>
+                           <name>SAMPASelect</name>
+                           <enumeratedValue>
+                              <name>ADJ0</name>
+                              <description>16x Over-sampling = 7-8-9; 8x Over-sampling = 3-4-5</description>
+                              <value>0x0</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>ADJ1</name>
+                              <description>16x Over-sampling = 9-10-11; 8x Over-sampling = 4-5-6</description>
+                              <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>ADJ2</name>
+                              <description>16x Over-sampling = 11-12-13; 8x Over-sampling = 5-6-7</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>ADJ3</name>
+                              <description>16x Over-sampling = 13-14-15; 8x Over-sampling = 6-7-8</description>
+                              <value>0x3</value>
+                           </enumeratedValue>
+                        </enumeratedValues>
                      </field>
                      <field>
                         <name>FORM</name>
@@ -13865,7 +14175,7 @@ Copyright (c) 2017 Microchip Technology Inc.
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>USART_FRAME_AUTO_BAUD_NO_PARITY</name>
-                              <description>Auto-baud - break detection and auto-baud</description>
+                              <description>Auto-baud (LIN Slave) - break detection and auto-baud</description>
                               <value>0x4</value>
                            </enumeratedValue>
                            <enumeratedValue>
@@ -14048,6 +14358,24 @@ Copyright (c) 2017 Microchip Technology Inc.
                         <description>LIN Command</description>
                         <bitOffset>24</bitOffset>
                         <bitWidth>2</bitWidth>
+                        <enumeratedValues>
+                           <name>LINCMDSelect</name>
+                           <enumeratedValue>
+                              <name>NONE</name>
+                              <description>Normal USART transmission</description>
+                              <value>0x0</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>SOFTWARE_CONTROL_TRANSMIT_CMD</name>
+                              <description>Break field is transmitted when DATA is written</description>
+                              <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>AUTO_TRANSMIT_CMD</name>
+                              <description>Break, sync and identifier are automatically transmitted when DATA is written with the identifier</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                        </enumeratedValues>
                      </field>
                   </fields>
                </register>
@@ -14069,12 +14397,58 @@ Copyright (c) 2017 Microchip Technology Inc.
                         <description>LIN Master Break Length</description>
                         <bitOffset>8</bitOffset>
                         <bitWidth>2</bitWidth>
+                        <enumeratedValues>
+                           <name>BRKLENSelect</name>
+                           <enumeratedValue>
+                              <name>13_BIT</name>
+                              <description>Break field transmission is 13 bit times</description>
+                              <value>0x0</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>17_BIT</name>
+                              <description>Break field transmission is 17 bit times</description>
+                              <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>21_BIT</name>
+                              <description>Break field transmission is 21 bit times</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>26_BIT</name>
+                              <description>Break field transmission is 26 bit times</description>
+                              <value>0x3</value>
+                           </enumeratedValue>
+                        </enumeratedValues>
                      </field>
                      <field>
                         <name>HDRDLY</name>
                         <description>LIN Master Header Delay</description>
                         <bitOffset>10</bitOffset>
                         <bitWidth>2</bitWidth>
+                        <enumeratedValues>
+                           <name>HDRDLYSelect</name>
+                           <enumeratedValue>
+                              <name>DELAY0</name>
+                              <description>Delay between break and sync transmission is 1 bit time; Delay between sync and ID transmission is 1 bit time</description>
+                              <value>0x0</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>DELAY1</name>
+                              <description>Delay between break and sync transmission is 4 bit time; Delay between sync and ID transmission is 4 bit time</description>
+                              <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>DELAY2</name>
+                              <description>Delay between break and sync transmission is 8 bit time; Delay between sync and ID transmission is 4 bit time</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>DELAY3</name>
+                              <description>Delay between break and sync transmission is 14 bit time; Delay between sync and ID transmission is 4 bit time</description>
+                              <value>0x3</value>
+                           </enumeratedValue>
+                        </enumeratedValues>
                      </field>
                   </fields>
                </register>
@@ -14550,13 +14924,23 @@ Copyright (c) 2017 Microchip Technology Inc.
                            <name>TXPOSelect</name>
                            <enumeratedValue>
                               <name>PAD0</name>
-                              <description>SERCOM PAD[0] is used for data transmission</description>
+                              <description>PAD[0] = TxD; PAD[1] = XCK</description>
                               <value>0x0</value>
                            </enumeratedValue>
                            <enumeratedValue>
-                              <name>PAD2</name>
-                              <description>SERCOM PAD[2] is used for data transmission</description>
+                              <name>PAD1</name>
+                              <description>PAD[2] = TxD; PAD[3] = XCK</description>
                               <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>PAD2</name>
+                              <description>PAD[0] = TxD; PAD[2] = RTS; PAD[3] = CTS</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>PAD3</name>
+                              <description>PAD[0] = TxD; PAD[1] = XCK; PAD[2] = TE</description>
+                              <value>0x3</value>
                            </enumeratedValue>
                         </enumeratedValues>
                      </field>
@@ -14594,6 +14978,29 @@ Copyright (c) 2017 Microchip Technology Inc.
                         <description>Sample Adjustment</description>
                         <bitOffset>22</bitOffset>
                         <bitWidth>2</bitWidth>
+                        <enumeratedValues>
+                           <name>SAMPASelect</name>
+                           <enumeratedValue>
+                              <name>ADJ0</name>
+                              <description>16x Over-sampling = 7-8-9; 8x Over-sampling = 3-4-5</description>
+                              <value>0x0</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>ADJ1</name>
+                              <description>16x Over-sampling = 9-10-11; 8x Over-sampling = 4-5-6</description>
+                              <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>ADJ2</name>
+                              <description>16x Over-sampling = 11-12-13; 8x Over-sampling = 5-6-7</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>ADJ3</name>
+                              <description>16x Over-sampling = 13-14-15; 8x Over-sampling = 6-7-8</description>
+                              <value>0x3</value>
+                           </enumeratedValue>
+                        </enumeratedValues>
                      </field>
                      <field>
                         <name>FORM</name>
@@ -14619,7 +15026,7 @@ Copyright (c) 2017 Microchip Technology Inc.
                            </enumeratedValue>
                            <enumeratedValue>
                               <name>USART_FRAME_AUTO_BAUD_NO_PARITY</name>
-                              <description>Auto-baud - break detection and auto-baud</description>
+                              <description>Auto-baud (LIN Slave) - break detection and auto-baud</description>
                               <value>0x4</value>
                            </enumeratedValue>
                            <enumeratedValue>
@@ -14802,6 +15209,24 @@ Copyright (c) 2017 Microchip Technology Inc.
                         <description>LIN Command</description>
                         <bitOffset>24</bitOffset>
                         <bitWidth>2</bitWidth>
+                        <enumeratedValues>
+                           <name>LINCMDSelect</name>
+                           <enumeratedValue>
+                              <name>NONE</name>
+                              <description>Normal USART transmission</description>
+                              <value>0x0</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>SOFTWARE_CONTROL_TRANSMIT_CMD</name>
+                              <description>Break field is transmitted when DATA is written</description>
+                              <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>AUTO_TRANSMIT_CMD</name>
+                              <description>Break, sync and identifier are automatically transmitted when DATA is written with the identifier</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                        </enumeratedValues>
                      </field>
                   </fields>
                </register>
@@ -14823,12 +15248,58 @@ Copyright (c) 2017 Microchip Technology Inc.
                         <description>LIN Master Break Length</description>
                         <bitOffset>8</bitOffset>
                         <bitWidth>2</bitWidth>
+                        <enumeratedValues>
+                           <name>BRKLENSelect</name>
+                           <enumeratedValue>
+                              <name>13_BIT</name>
+                              <description>Break field transmission is 13 bit times</description>
+                              <value>0x0</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>17_BIT</name>
+                              <description>Break field transmission is 17 bit times</description>
+                              <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>21_BIT</name>
+                              <description>Break field transmission is 21 bit times</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>26_BIT</name>
+                              <description>Break field transmission is 26 bit times</description>
+                              <value>0x3</value>
+                           </enumeratedValue>
+                        </enumeratedValues>
                      </field>
                      <field>
                         <name>HDRDLY</name>
                         <description>LIN Master Header Delay</description>
                         <bitOffset>10</bitOffset>
                         <bitWidth>2</bitWidth>
+                        <enumeratedValues>
+                           <name>HDRDLYSelect</name>
+                           <enumeratedValue>
+                              <name>DELAY0</name>
+                              <description>Delay between break and sync transmission is 1 bit time; Delay between sync and ID transmission is 1 bit time</description>
+                              <value>0x0</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>DELAY1</name>
+                              <description>Delay between break and sync transmission is 4 bit time; Delay between sync and ID transmission is 4 bit time</description>
+                              <value>0x1</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>DELAY2</name>
+                              <description>Delay between break and sync transmission is 8 bit time; Delay between sync and ID transmission is 4 bit time</description>
+                              <value>0x2</value>
+                           </enumeratedValue>
+                           <enumeratedValue>
+                              <name>DELAY3</name>
+                              <description>Delay between break and sync transmission is 14 bit time; Delay between sync and ID transmission is 4 bit time</description>
+                              <value>0x3</value>
+                           </enumeratedValue>
+                        </enumeratedValues>
                      </field>
                   </fields>
                </register>
