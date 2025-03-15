@@ -41,7 +41,7 @@ pub fn adc_linearity_cal() -> u8 {
     // bits 7:5
     let high = cal(1, 0, 0x7) as u8;
 
-    high << 5 | low
+    (high << 5) | low
 }
 
 /// ADC Bias Calibration. Should be written to ADC CALIB register.
