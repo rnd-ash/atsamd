@@ -21,13 +21,19 @@ pub use adc0::refctrl::Refselselect as Reference;
 /// Result accumulation strategy for the ADC
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Accumulation {
-    /// The ADC will read once and then the result is ready
+    /// The ADC will read once and then the result is ready.
+    ///
+    /// The result will be in the users chosen bitwidth
     Single,
-    /// The ADC will read [AdcSampleCount] samples, average them out
-    /// into a 16 bit wide value, and then the result is ready
+    /// The ADC will read [SampleCount] samples, average them out
+    /// into a 16 bit wide value, and then the result is ready.
+    ///
+    /// The result will be in the range of 0-65535 (16bit)
     Average(SampleCount),
-    /// The ADC will read [AdcSampleCount] samples, sum them
-    /// into a 16 bit wide value, and then the result is ready
+    /// The ADC will read [SampleCount] samples, sum them
+    /// into a 16 bit wide value, and then the result is ready.
+    ///
+    /// The result will be in the range of 0-65535 (16bit)
     Summed(SampleCount),
 }
 
@@ -38,15 +44,15 @@ pub enum Accumulation {
 /// the sample rate of the ADC
 ///
 /// To begin with, the ADC Clock is driven by the peripheral clock divided with
-/// a divider ([AdcDivider]).
+/// a divider (see [Config::clock_divider]).
 ///
 /// Each sample is read by the ADC over
-/// [AdcSettingsBuilder::sample_clock_cycles] clock cycles, and then transmitted
-/// to the ADC register over [AdcSettingsBuilder::bit_width] clock cycles (1
+/// [Config::sample_clock_cycles] clock cycles, and then transmitted
+/// to the ADC register over [Config::bit_width] clock cycles (1
 /// clock cycle per bit)
 ///
 /// The ADC can also be configured to combine multiple simultaneous readings in
-/// either an average or summed mode (See [AdcAccumulation]), this also affects
+/// either an average or summed mode (See [Accumulation]), this also affects
 /// the overall sample rate of the ADC as the ADC has to do multiple
 /// samples before a result is ready.
 ///
@@ -71,16 +77,13 @@ pub struct Config {
 }
 
 impl Config {
-    ///
-    /// Configure the ADC to sample at 250_000 SPS (Assuming the clock source is
+    /// Configure the ADC to sample at 250_000 SPS (Assuming the ADC Gclk source is
     /// 48MHz) using the following settings:
     /// * clock divider factor of 32
     /// * 6 clock cycles per sample
-    /// * 12bit sampling
-    /// * Single accumulation (No averaging or summing)
-    ///
-    /// ## Additional reading settings by default
-    /// * Use VDDANA as reference voltage for a full 0.0-3.3V reading
+    /// * 12bit ADC result resolution
+    /// * ADC will not perform any averaging or summation of multiple readings
+    /// * Use Intvcc1 (Analog reference voltage) as reference voltage for a full 0.0-3.3V reading
     pub fn new() -> Self {
         Self {
             clk_divider: Prescaler::Div32,
@@ -91,7 +94,6 @@ impl Config {
         }
     }
 
-    ///
     /// This setting adjusts the ADC clock frequency by dividing the input clock
     /// for the ADC.
     ///
@@ -102,12 +104,17 @@ impl Config {
         self
     }
 
-    /// This setting adjusts the bit width of each ADC sample
+    /// Sets the ADC output resolution
+    ///
+    /// ## Application Notes
+    /// [Resolution::_16bit] can only be used if the ADC is in summation or averaging mode. See [Config::accumulation_method] for
+    /// more detail
     pub fn sample_resolution(mut self, bit_width: Resolution) -> Self {
         self.bit_width = bit_width;
         self
     }
 
+    /// Sets the ADC reference voltage source
     pub fn with_vref(mut self, reference: Reference) -> Self {
         self.vref = reference;
         self
@@ -119,35 +126,41 @@ impl Config {
     /// The default is single (ADC will return a sample as soon as it is
     /// measured)
     ///
-    /// Setting [AdcAccumulation::Summed] will make the ADC take 'n' samples,
+    /// Setting [Accumulation::Summed] will make the ADC take 'n' samples,
     /// and sum the total before returning it
     ///
-    /// Setting [AdcAccumulation::Average] will make the ADC take 'n' samples,
+    /// Setting [Accumulation::Average] will make the ADC take 'n' samples,
     /// and average the total before returning it
     ///
-    /// NOTE: Selecting [AdcAccumulation::Summed] or [AdcAccumulation::Average]
-    /// will reduce the overall ADC sample rate by a factor of 1/n, and the
-    /// returned value will be 16bits long no matter what the sample Bit
-    /// width was selected as
+    /// ## Application notes
+    /// 
+    /// * Selecting [Accumulation::Summed] or [Accumulation::Average]
+    /// will reduce the overall ADC sample rate by a factor of 1/n, and 
+    /// the ADC resolution will be set to [Resolution::_16bit] which is required
+    /// in these modes.
     pub fn accumulation_method(mut self, method: Accumulation) -> Self {
         self.accumulation = method;
+        if Accumulation::Single != self.accumulation {
+            // Auto set 16bit
+            self.bit_width = Resolution::_16bit;
+        }
         self
     }
 
-    /// This adjusts the number of ADC clock cycles taken to sample a single
+    /// Sets the number of ADC clock cycles taken to sample a single
     /// sample. The higher this number, the longer it will take the ADC to
-    /// sample each sample.
+    /// sample each sample. Smaller values will make the ADC perform more samples per second,
+    /// but there may be more noise in each sample leading to irratic values.
     ///
     /// ## Safety
-    /// Internally, this function will clamp the minimum input value to 1 to
-    /// avoid 0
+    /// * This function will clamp input value between 1 and 63, to conform to the ADC registers
+    /// min and max values.
     pub fn clock_cycles_per_sample(mut self, num: u8) -> Self {
-        self.sample_clock_cycles = 1.max(num); // Prevent 0
+        self.sample_clock_cycles = num.clamp(1, 63); // Clamp in range
         self
     }
 
-    ///
-    /// Returns a calculated sample rate of the ADC with these settings
+    /// Returns a calculated sample rate based on the settings used
     pub fn calculate_sps(&self, clock_freq: u32) -> u32 {
         let div = self.clk_divider as u32;
         let adc_clk_freq = clock_freq / div;

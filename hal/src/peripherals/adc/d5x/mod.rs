@@ -141,6 +141,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
 
 impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
     #[inline]
+    /// As per the datasheet
     fn tp_tc_to_temp(&self, tp: f32, tc: f32) -> f32 {
         let tl = calibration::tl();
         let th = calibration::th();

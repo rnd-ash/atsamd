@@ -202,7 +202,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     ///
     /// ## Important
     ///
-    /// This function will return `Err` if the clock source provided
+    /// This function will return [Error::ClockTooFast] if the clock source provided
     /// is faster than 48 MHz, since this is the maximum frequency for the
     /// ADC as per the datasheet.
     #[hal_cfg(any("adc-d11", "adc-d21"))]
@@ -228,6 +228,15 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         Ok(new_adc)
     }
 
+    /// Use the [`Adc`] in async mode. You are required to provide the
+    /// struct created by the
+    /// [`bind_interrupts`](crate::bind_interrupts) macro to prove
+    /// that the interrupt sources have been correctly configured. This function
+    /// will automatically enable the relevant NVIC interrupt sources. However,
+    /// you are required to configure the desired interrupt priorities prior to
+    /// calling this method. Consult [`crate::async_hal::interrupts`]
+    /// module-level documentation for more information.
+    /// [`bind_interrupts`](crate::bind_interrupts).
     #[cfg(feature = "async")]
     #[atsamd_hal_macros::hal_macro_helper]
     #[inline]
