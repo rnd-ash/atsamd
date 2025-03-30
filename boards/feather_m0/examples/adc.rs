@@ -54,6 +54,7 @@ fn main() -> ! {
     let mut adc_pin = pins.a0.into_alternate();
 
     loop {
+        #[allow(dead_code)]
         let mut buffer = [0; 16];
         let res = adc.read_buffer_blocking(&mut adc_pin, &mut buffer).unwrap();
         #[cfg(feature = "use_semihosting")]
