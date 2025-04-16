@@ -30,12 +30,6 @@ async fn main(_s: embassy_executor::Spawner) -> ! {
 
     let pins = Pins::new(peripherals.port);
 
-    // TODO: currently this example only runs at the chip's
-    // 48 MHz CPU frequency at reset. There is currently a
-    // bug with the clock::v2 module that affects speeding
-    // up the CPU clock to a nominal 100 or 120 MHz. The bug
-    // is currently under investigation, and this example should
-    // be updated accordingly when it's fixed.
     let (mut buses, clocks, tokens) = clock_system_at_reset(
         peripherals.oscctrl,
         peripherals.osc32kctrl,
@@ -62,9 +56,8 @@ async fn main(_s: embassy_executor::Spawner) -> ! {
     let mut adc_pin = pins.a0.into_alternate();
 
     loop {
-        let mut buffer = [0; 16];
-        let res = adc.read_buffer(&mut adc_pin, &mut buffer).await.unwrap();
+        let _res = adc.read(&mut adc_pin).await.unwrap();
         #[cfg(feature = "use_semihosting")]
-        cortex_m_semihosting::hprintln!("Result: {:?}", res).unwrap();
+        cortex_m_semihosting::hprintln!("Result: {:?}", _res).unwrap();
     }
 }

@@ -290,7 +290,7 @@ impl<I: AdcInstance, F> Adc<I, F> {
     #[inline]
     fn read_blocking_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
-        let _ = self.check_and_clear_flags(self.read_flags());
+        self.clear_all_flags();
         self.disable_interrupts(Flags::all());
         self.disable_freerunning();
         self.sync();
@@ -319,7 +319,7 @@ impl<I: AdcInstance, F> Adc<I, F> {
     #[inline]
     fn read_buffer_blocking_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
-        let _ = self.check_and_clear_flags(self.read_flags());
+        self.clear_all_flags();
 
         self.disable_interrupts(Flags::all());
         self.mux(ch);
@@ -333,7 +333,9 @@ impl<I: AdcInstance, F> Adc<I, F> {
                 core::hint::spin_loop();
             }
 
-            if let Err(e) = self.check_and_clear_flags(self.read_flags()) {
+            let flags = self.read_flags();
+            self.clear_all_flags();
+            if let Err(e) = self.check_overrun(&flags) {
                 self.power_down();
                 self.disable_freerunning();
 
@@ -416,7 +418,7 @@ where
     #[inline]
     async fn read_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
-        let _ = self.check_and_clear_flags(self.read_flags());
+        self.clear_all_flags();
         self.disable_freerunning();
         self.mux(ch);
         self.power_up();
@@ -444,7 +446,7 @@ where
     #[inline]
     async fn read_buffer_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
-        let _ = self.check_and_clear_flags(self.read_flags());
+        self.clear_all_flags();
 
         self.mux(ch);
 

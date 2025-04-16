@@ -42,7 +42,6 @@ async fn main(_s: embassy_executor::Spawner) -> ! {
 
     let adc_settings = Config::new()
         .clock_cycles_per_sample(5)
-        // Overruns if clock divider < 128 in debug mode
         .clock_divider(Prescaler::Div128)
         .sample_resolution(Resolution::_12bit)
         .accumulation_method(Accumulation::Single);
@@ -59,8 +58,8 @@ async fn main(_s: embassy_executor::Spawner) -> ! {
 
     loop {
         let mut buffer = [0; 16];
-        let res = adc.read_buffer(&mut adc_pin, &mut buffer).await.unwrap();
+        let _res = adc.read(&mut adc_pin, &mut buffer).await.unwrap();
         #[cfg(feature = "use_semihosting")]
-        cortex_m_semihosting::hprintln!("Result: {:?}", res).unwrap();
+        cortex_m_semihosting::hprintln!("Result: {:?}", _res).unwrap();
     }
 }

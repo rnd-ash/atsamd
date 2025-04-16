@@ -57,7 +57,8 @@ where
             {
                 let maybe_pending = self.read_flags();
                 if flags_to_wait.intersects(maybe_pending) {
-                    let result = self.check_and_clear_flags(maybe_pending);
+                    let result = self.check_overrun(&maybe_pending);
+                    self.clear_flags(&maybe_pending.intersection(flags_to_wait));
                     self.disable_interrupts(flags_to_wait);
                     return Poll::Ready(result);
                 }
@@ -71,7 +72,8 @@ where
             if !flags_to_wait.intersects(maybe_pending) {
                 Poll::Pending
             } else {
-                let result = self.check_and_clear_flags(maybe_pending);
+                let result = self.check_overrun(&maybe_pending);
+                self.clear_flags(&maybe_pending.intersection(flags_to_wait));
                 self.disable_interrupts(flags_to_wait);
                 Poll::Ready(result)
             }

@@ -39,7 +39,6 @@ fn main() -> ! {
 
     let adc_settings = Config::new()
         .clock_cycles_per_sample(5)
-        // Overruns if clock divider < 128 in debug mode
         .clock_divider(Prescaler::Div128)
         .sample_resolution(Resolution::_12bit)
         .accumulation_method(Accumulation::Single);
@@ -54,10 +53,8 @@ fn main() -> ! {
     let mut adc_pin = pins.a0.into_alternate();
 
     loop {
-        #[allow(dead_code)]
-        let mut buffer = [0; 16];
-        let res = adc.read_buffer_blocking(&mut adc_pin, &mut buffer).unwrap();
+        let _res = adc.read_blocking(&mut adc_pin).unwrap();
         #[cfg(feature = "use_semihosting")]
-        cortex_m_semihosting::hprintln!("Result: {:?}", res).unwrap();
+        cortex_m_semihosting::hprintln!("Result: {:?}", _res).unwrap();
     }
 }

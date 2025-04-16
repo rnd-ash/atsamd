@@ -133,11 +133,11 @@ impl Config {
     /// and average the total before returning it
     ///
     /// ## Application notes
-    /// 
+    ///
     /// * Selecting [Accumulation::Summed] or [Accumulation::Average]
-    /// will reduce the overall ADC sample rate by a factor of 1/n, and 
-    /// the ADC resolution will be set to [Resolution::_16bit] which is required
-    /// in these modes.
+    ///   will reduce the overall ADC sample rate by a factor of 1/n, and
+    ///   the ADC resolution will be set to [Resolution::_16bit] which is required
+    ///   in these modes.
     pub fn accumulation_method(mut self, method: Accumulation) -> Self {
         self.accumulation = method;
         if Accumulation::Single != self.accumulation {
@@ -154,7 +154,7 @@ impl Config {
     ///
     /// ## Safety
     /// * This function will clamp input value between 1 and 63, to conform to the ADC registers
-    /// min and max values.
+    ///   min and max values.
     pub fn clock_cycles_per_sample(mut self, num: u8) -> Self {
         self.sample_clock_cycles = num.clamp(1, 63); // Clamp in range
         self
