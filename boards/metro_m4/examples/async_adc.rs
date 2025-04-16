@@ -31,12 +31,6 @@ async fn main(_s: embassy_executor::Spawner) -> ! {
 
     let pins = Pins::new(peripherals.port);
 
-    // TODO: currently this example only runs at the chip's
-    // 48 MHz CPU frequency at reset. There is currently a
-    // bug with the clock::v2 module that affects speeding
-    // up the CPU clock to a nominal 100 or 120 MHz. The bug
-    // is currently under investigation, and this example should
-    // be updated accordingly when it's fixed.
     let (mut buses, clocks, tokens) = clock_system_at_reset(
         peripherals.oscctrl,
         peripherals.osc32kctrl,
@@ -53,6 +47,7 @@ async fn main(_s: embassy_executor::Spawner) -> ! {
 
     let mut adc = AdcBuilder::new(Accumulation::single(atsamd_hal::adc::AdcResolution::_12))
         .with_clock_cycles_per_sample(5)
+        // Overruns if clock divider < 32 in debug mode
         .with_clock_divider(Prescaler::Div32)
         .with_vref(atsamd_hal::adc::Reference::Arefa)
         .enable(peripherals.adc0, apb_adc0, &pclk_adc0)
@@ -62,9 +57,9 @@ async fn main(_s: embassy_executor::Spawner) -> ! {
     let mut adc_pin = pins.a0.into_alternate();
 
     loop {
-        let mut buffer = [0; 16];
-        let res = adc.read_buffer(&mut adc_pin, &mut buffer).await.unwrap();
+        let mut _buffer = [0; 16];
+        let _res = adc.read_buffer(&mut adc_pin, &mut _buffer).await.unwrap();
         #[cfg(feature = "use_semihosting")]
-        cortex_m_semihosting::hprintln!("Result: {:?}", res).unwrap();
+        cortex_m_semihosting::hprintln!("Result: {:?}", &_buffer).unwrap();
     }
 }
