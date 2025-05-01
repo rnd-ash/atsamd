@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+use atsamd_hal::adc::AdcBuilder;
 use metro_m4 as bsp;
 
 use bsp::hal;
@@ -15,7 +16,7 @@ use bsp::Pins;
 use pac::{CorePeripherals, Peripherals};
 
 use hal::{
-    adc::{Accumulation, Adc, Adc0, Config, Prescaler, Resolution},
+    adc::{Accumulation, Adc, Adc0, Prescaler, Resolution},
     clock::v2::{clock_system_at_reset, pclk::Pclk},
 };
 
@@ -50,15 +51,14 @@ async fn main(_s: embassy_executor::Spawner) -> ! {
     // ADC to run.
     let (pclk_adc0, _gclk0) = Pclk::enable(tokens.pclks.adc0, clocks.gclk0);
 
-    let adc0_settings = Config::new()
-        .clock_cycles_per_sample(5)
-        .clock_divider(Prescaler::Div32)
-        .sample_resolution(Resolution::_12bit)
-        .accumulation_method(Accumulation::Single);
-
-    let mut adc = Adc::new(peripherals.adc0, adc0_settings, apb_adc0, &pclk_adc0)
+    let mut adc = AdcBuilder::new(Accumulation::single(atsamd_hal::adc::AdcResolution::_12))
+        .with_clock_cycles_per_sample(5)
+        .with_clock_divider(Prescaler::Div32)
+        .with_vref(atsamd_hal::adc::Reference::Arefa)
+        .enable(peripherals.adc0, apb_adc0, &pclk_adc0)
         .unwrap()
         .into_future(Irqs);
+
     let mut adc_pin = pins.a0.into_alternate();
 
     loop {
