@@ -24,8 +24,8 @@ mod async_api;
 #[cfg(feature = "async")]
 pub use async_api::*;
 
-mod config;
-pub use config::*;
+mod builder;
+pub use builder::*;
 
 #[hal_cfg(any("adc-d11", "adc-d21"))]
 use crate::pac::adc as adc0;
@@ -33,7 +33,7 @@ use crate::pac::adc as adc0;
 use crate::pac::adc0;
 
 /// Errors that may occur when operating the ADC
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
     /// Clock too fast.
@@ -56,11 +56,6 @@ pub enum Error {
     /// the SUPC peripheral has not been configured correctly to expose
     /// the temperature sensors.
     TemperatureSensorNotEnabled,
-    /// Invalid ADC Setting sample bit width
-    ///
-    /// This can happen if you are trying to average/sum ADC values,
-    /// and did not select 16bit bitwidth for ADC outputs
-    InvalidSampleBitWidth,
 }
 
 /// Voltage source to use when using the ADC to measure the CPU voltage
@@ -138,7 +133,7 @@ where
 pub struct Adc<I: AdcInstance, F = NoneT> {
     adc: I::Instance,
     _irqs: PhantomData<F>,
-    cfg: Config,
+    cfg: AdcSettings,
 }
 
 /// ADC Instance
@@ -147,7 +142,7 @@ pub struct Adc<I: AdcInstance, F = NoneT> {
     adc: I::Instance,
     _irqs: PhantomData<F>,
     _apbclk: crate::clock::v2::apb::ApbClk<I::ClockId>,
-    cfg: Config,
+    cfg: AdcSettings,
 }
 
 impl<I: AdcInstance> Adc<I, NoneT> {
@@ -168,9 +163,9 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     /// frequency for the ADC is restricted to 90Mhz for stable performance.
     #[hal_cfg("adc-d5x")]
     #[inline]
-    pub fn new<PS: crate::clock::v2::pclk::PclkSourceId>(
+    pub(crate) fn new<PS: crate::clock::v2::pclk::PclkSourceId>(
         adc: I::Instance,
-        config: Config,
+        settings: AdcSettings,
         clk: crate::clock::v2::apb::ApbClk<I::ClockId>,
         pclk: &crate::clock::v2::pclk::Pclk<I::ClockId, PS>,
     ) -> Result<Self, Error> {
@@ -192,9 +187,9 @@ impl<I: AdcInstance> Adc<I, NoneT> {
             adc,
             _irqs: PhantomData,
             _apbclk: clk,
-            cfg: config,
+            cfg: settings,
         };
-        new_adc.configure(config)?;
+        new_adc.configure()?;
         Ok(new_adc)
     }
 
@@ -207,9 +202,9 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     /// ADC as per the datasheet.
     #[hal_cfg(any("adc-d11", "adc-d21"))]
     #[inline]
-    pub fn new(
+    pub(crate) fn new(
         adc: I::Instance,
-        config: Config,
+        settings: AdcSettings,
         pm: &mut pac::Pm,
         clock: &crate::clock::AdcClock,
     ) -> Result<Self, Error> {
@@ -222,9 +217,9 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         let mut new_adc = Self {
             adc,
             _irqs: PhantomData,
-            cfg: config,
+            cfg: settings,
         };
-        new_adc.configure(config)?;
+        new_adc.configure()?;
         Ok(new_adc)
     }
 
@@ -263,11 +258,11 @@ impl<I: AdcInstance, F> Adc<I, F> {
     /// Converts our ADC Reading (0-n) to the range 0.0-1.0, where
     /// 1.0 = 2^(reading_bitwidth)
     fn reading_to_f32(&self, raw: u16) -> f32 {
-        let max = match self.cfg.bit_width {
-            Resolution::_16bit => 65536,
-            Resolution::_12bit => 4096,
-            Resolution::_10bit => 1024,
-            Resolution::_8bit => 256,
+        let max = match self.cfg.accumulation.bits() {
+            Resolution::_16bit => 65535,
+            Resolution::_12bit => 4095,
+            Resolution::_10bit => 1023,
+            Resolution::_8bit => 255,
         };
         raw as f32 / max as f32
     }

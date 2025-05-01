@@ -1,7 +1,7 @@
 pub mod pin;
 
 use super::{
-    Accumulation, Adc, AdcInstance, Config, Error, Flags, PrimaryAdc, Resolution, SampleCount,
+    Accumulation, Adc, AdcInstance, Error, Flags, PrimaryAdc, SampleCount
 };
 use crate::typelevel::NoneT;
 use crate::{calibration, pac};
@@ -80,7 +80,7 @@ impl AdcInstance for Adc1 {
 
 impl<I: AdcInstance> Adc<I, NoneT> {
     #[inline]
-    pub fn configure(&mut self, config: Config) -> Result<(), super::Error> {
+    pub fn configure(&mut self) -> Result<(), super::Error> {
         // Reset ADC here as we cannot guarantee its state
         // This also disables the ADC
         self.software_reset();
@@ -89,31 +89,25 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         self.sync();
         self.adc
             .ctrla()
-            .modify(|_, w| w.prescaler().variant(config.clk_divider));
+            .modify(|_, w| w.prescaler().variant(self.cfg.clk_divider));
         self.sync();
         self.adc
             .ctrlb()
-            .modify(|_, w| w.ressel().variant(config.bit_width));
+            .modify(|_, w| w.ressel().variant(self.cfg.accumulation.bits()));
         self.sync();
 
         self.adc
             .sampctrl()
-            .modify(|_, w| unsafe { w.samplen().bits(config.sample_clock_cycles) }); // sample length
+            .modify(|_, w| unsafe { w.samplen().bits(self.cfg.sample_clock_cycles) }); // sample length
         self.sync();
         self.adc.inputctrl().modify(|_, w| {
             w.muxneg().gnd();
             w.diffmode().clear_bit()
         }); // No negative input (internal gnd)
         self.sync();
-
-        // Check bit width selected
-        if config.accumulation != Accumulation::Single && config.bit_width != Resolution::_16bit {
-            return Err(super::Error::InvalidSampleBitWidth);
-        }
-
-        let (sample_cnt, adjres) = match config.accumulation {
+        let (sample_cnt, adjres) = match self.cfg.accumulation {
             // 1 sample to be used as is
-            Accumulation::Single => (SampleCount::_1, 0),
+            Accumulation::Single(_) => (SampleCount::_1, 0),
             // A total of `adc_sample_count` elements will be averaged by the ADC
             // before it returns the result
             // Table 45-3 SAMx5x datasheet
@@ -128,7 +122,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         });
         self.sync();
 
-        self.set_reference(config.vref);
+        self.set_reference(self.cfg.vref);
         self.sync();
 
         self.disable_freerunning();

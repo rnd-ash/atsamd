@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+use atsamd_hal::adc::AdcBuilder;
 use samd11_bare as bsp;
 
 use bsp::hal;
@@ -16,7 +17,7 @@ use bsp::Pins;
 use pac::{CorePeripherals, Peripherals};
 
 use hal::{
-    adc::{Accumulation, Adc, Config, Prescaler, Resolution},
+    adc::{Accumulation, Adc, Prescaler, Resolution},
     clock::GenericClockController,
 };
 
@@ -37,20 +38,13 @@ fn main() -> ! {
     let gclk0 = clocks.gclk0();
     let adc_clock = clocks.adc(&gclk0).unwrap();
 
-    let adc_settings = Config::new()
-        .clock_cycles_per_sample(5)
+    let mut adc = AdcBuilder::new(Accumulation::single(atsamd_hal::adc::AdcResolution::_12))
+        .with_clock_cycles_per_sample(5)
         // Overruns if clock divider < 128 in debug mode
-        .clock_divider(Prescaler::Div128)
-        .sample_resolution(Resolution::_12bit)
-        .accumulation_method(Accumulation::Single);
+        .with_clock_divider(Prescaler::Div128)
+        .enable(peripherals.adc,&mut peripherals.pm,&adc_clock)
+        .unwrap();
 
-    let mut adc = Adc::new(
-        peripherals.adc,
-        adc_settings,
-        &mut peripherals.pm,
-        &adc_clock,
-    )
-    .unwrap();
     let mut adc_pin = pins.d1.into_alternate();
 
     loop {
