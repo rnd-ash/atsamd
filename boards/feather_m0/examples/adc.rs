@@ -48,10 +48,9 @@ fn main() -> ! {
     let mut adc_pin = pins.a0.into_alternate();
 
     loop {
-        #[allow(dead_code)]
-        let mut buffer = [0; 16];
-        let res = adc.read_buffer(&mut adc_pin, &mut buffer).unwrap();
+        let mut _buffer = [0; 16];
+        adc.read_buffer(&mut adc_pin, &mut _buffer).unwrap();
         #[cfg(feature = "use_semihosting")]
-        cortex_m_semihosting::hprintln!("Buffer: {:?}", buffer).unwrap();
+        cortex_m_semihosting::hprintln!("Buffer: {:?}", _buffer).unwrap();
     }
 }

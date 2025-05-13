@@ -53,9 +53,9 @@ async fn main(_s: embassy_executor::Spawner) -> ! {
     let mut adc_pin = pins.a0.into_alternate();
 
     loop {
-        let mut buffer = [0; 16];
-        let res = adc.read_buffer(&mut adc_pin, &mut buffer).await.unwrap();
+        let mut _buffer = [0; 16];
+        adc.read_buffer(&mut adc_pin, &mut _buffer).await.unwrap();
         #[cfg(feature = "use_semihosting")]
-        cortex_m_semihosting::hprintln!("Result: {:?}", res).unwrap();
+        cortex_m_semihosting::hprintln!("Result: {:?}", &_buffer).unwrap();
     }
 }

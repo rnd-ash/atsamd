@@ -150,21 +150,25 @@ impl<I: AdcInstance> Adc<I> {
         Flags::from_bits_truncate(bits)
     }
 
+    /// Clear the specified interrupt flags
     #[inline]
-    pub(super) fn clear_flags(&mut self, flags: Flags) {
+    pub(super) fn clear_flags(&mut self, flags: &Flags) {
         unsafe {
             self.adc.intflag().write(|w| w.bits(flags.bits()));
         }
     }
 
-    /// Check the interrupt flags, clears them and returns `Err` if an overflow
-    /// occured
+    /// Clear all interrupt flags
     #[inline]
-    pub(super) fn check_and_clear_flags(&mut self, flags: Flags) -> Result<(), Error> {
-        // Keep a copy around so we can check for errors later
-        let flags_to_clear = flags;
-        self.clear_flags(flags_to_clear);
+    pub(super) fn clear_all_flags(&mut self) {
+        unsafe {
+            self.adc.intflag().write(|w| w.bits(0b1111));
+        }
+    }
 
+    /// Check whether the provided flags contain an `OVERRUN` error
+    #[inline]
+    pub(super) fn check_overrun(&mut self, flags: &Flags) -> Result<(), Error> {
         if flags.contains(Flags::OVERRUN) {
             Err(Error::BufferOverrun)
         } else {
