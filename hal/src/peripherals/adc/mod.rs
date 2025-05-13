@@ -1,15 +1,11 @@
 //! Analog-to-Digital Converter
 
-use core::{marker::PhantomData, ops::Deref};
+use core::ops::Deref;
 
 use atsamd_hal_macros::{hal_cfg, hal_module};
 use pac::Peripherals;
 
-use crate::{
-    gpio::AnyPin,
-    pac,
-    typelevel::{NoneT, Sealed},
-};
+use crate::{gpio::AnyPin, pac, typelevel::Sealed};
 
 #[hal_module(
     any("adc-d11", "adc-d21") => "d11/mod.rs",
@@ -31,6 +27,26 @@ pub use builder::*;
 use crate::pac::adc as adc0;
 #[hal_cfg("adc-d5x")]
 use crate::pac::adc0;
+
+pub use adc0::refctrl::Refselselect as Reference;
+
+/// ADC Settings when reading Internal sensors (Like VREF and Temperatures)
+/// These settings are based on the minimums suggested in the datasheet
+const ADC_SETTINGS_INTERNAL_READ: AdcSettings = AdcSettings {
+    clk_divider: Prescaler::Div64,
+    sample_clock_cycles: 6,
+    accumulation: Accumulation::Single(AdcResolution::_12),
+    vref: Reference::Intvcc1,
+};
+
+/// Based on Temperature log row information (NVM)x
+#[hal_cfg(any("adc-d21", "adc-d11"))]
+const ADC_SETTINGS_INTERNAL_READ_D21_TEMP: AdcSettings = AdcSettings {
+    clk_divider: Prescaler::Div256,
+    sample_clock_cycles: 64,
+    accumulation: Accumulation::Single(AdcResolution::_12),
+    vref: Reference::Int1v,
+};
 
 /// Errors that may occur when operating the ADC
 #[derive(Debug, Copy, Clone)]
@@ -130,22 +146,26 @@ where
 
 /// ADC Instance
 #[hal_cfg(any("adc-d11", "adc-d21"))]
-pub struct Adc<I: AdcInstance, F = NoneT> {
+pub struct Adc<I: AdcInstance> {
     adc: I::Instance,
-    _irqs: PhantomData<F>,
     cfg: AdcSettings,
 }
 
 /// ADC Instance
 #[hal_cfg("adc-d5x")]
-pub struct Adc<I: AdcInstance, F = NoneT> {
+pub struct Adc<I: AdcInstance> {
     adc: I::Instance,
-    _irqs: PhantomData<F>,
     _apbclk: crate::clock::v2::apb::ApbClk<I::ClockId>,
     cfg: AdcSettings,
 }
 
-impl<I: AdcInstance> Adc<I, NoneT> {
+#[cfg(feature = "async")]
+pub struct FutureAdc<I: AdcInstance, F> {
+    inner: Adc<I>,
+    irqs: F,
+}
+
+impl<I: AdcInstance> Adc<I> {
     /// Construct a new ADC instance
     ///
     /// ## Important
@@ -185,11 +205,10 @@ impl<I: AdcInstance> Adc<I, NoneT> {
 
         let mut new_adc = Self {
             adc,
-            _irqs: PhantomData,
             _apbclk: clk,
             cfg: settings,
         };
-        new_adc.configure()?;
+        new_adc.configure(settings);
         Ok(new_adc)
     }
 
@@ -214,17 +233,13 @@ impl<I: AdcInstance> Adc<I, NoneT> {
         }
 
         I::enable_pm(pm);
-        let mut new_adc = Self {
-            adc,
-            _irqs: PhantomData,
-            cfg: settings,
-        };
-        new_adc.configure()?;
+        let mut new_adc = Self { adc, cfg: settings };
+        new_adc.configure(settings);
         Ok(new_adc)
     }
 
-    /// Use the [`Adc`] in async mode. You are required to provide the
-    /// struct created by the
+    /// Switch the ['Adc'] to ['FutureAdc'], allowing for the use of async reading
+    /// methods. You are required to provide the struct created by the
     /// [`bind_interrupts`](crate::bind_interrupts) macro to prove
     /// that the interrupt sources have been correctly configured. This function
     /// will automatically enable the relevant NVIC interrupt sources. However,
@@ -235,7 +250,7 @@ impl<I: AdcInstance> Adc<I, NoneT> {
     #[cfg(feature = "async")]
     #[atsamd_hal_macros::hal_macro_helper]
     #[inline]
-    pub fn into_future<F>(self, _irqs: F) -> Adc<I, F>
+    pub fn into_future<F>(self, irqs: F) -> FutureAdc<I, F>
     where
         F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
     {
@@ -244,27 +259,38 @@ impl<I: AdcInstance> Adc<I, NoneT> {
             I::Interrupt::unpend();
             I::Interrupt::enable();
         }
-        Adc {
-            adc: self.adc,
-            cfg: self.cfg,
-            #[hal_cfg("adc-d5x")]
-            _apbclk: self._apbclk,
-            _irqs: PhantomData,
-        }
+        FutureAdc { inner: self, irqs }
     }
 }
 
-impl<I: AdcInstance, F> Adc<I, F> {
+impl<I: AdcInstance> Adc<I> {
     /// Converts our ADC Reading (0-n) to the range 0.0-1.0, where
     /// 1.0 = 2^(reading_bitwidth)
     fn reading_to_f32(&self, raw: u16) -> f32 {
-        let max = match self.cfg.accumulation.bits() {
+        let max = match self.cfg.accumulation.resolution() {
             Resolution::_16bit => 65535,
             Resolution::_12bit => 4095,
             Resolution::_10bit => 1023,
             Resolution::_8bit => 255,
         };
         raw as f32 / max as f32
+    }
+
+    /// Runs something using the ADC with overridden settings
+    ///
+    /// This is used mainly for internal voltage readings, where the ADC
+    /// must be configured with specific settings for optimal and accurate
+    /// reading
+    pub(crate) fn with_specific_settings<F: FnOnce(&mut Adc<I>) -> T, T>(
+        &mut self,
+        settings: AdcSettings,
+        f: F,
+    ) -> T {
+        let old_cfg = self.cfg;
+        self.configure(settings);
+        let ret = f(self);
+        self.configure(old_cfg);
+        ret
     }
 
     #[inline]
@@ -275,15 +301,15 @@ impl<I: AdcInstance, F> Adc<I, F> {
         self.sync();
     }
 
-    /// Read a single value from the provided ADC pin, in a blocking fashion
+    /// Read a single value from the provided ADC pin.
     #[inline]
-    pub fn read_blocking<P: AdcPin<I>>(&mut self, _pin: &mut P) -> u16 {
-        self.read_blocking_channel(P::CHANNEL)
+    pub fn read<P: AdcPin<I>>(&mut self, _pin: &mut P) -> u16 {
+        self.read_channel(P::CHANNEL)
     }
 
     /// Read a single value from the provided channel, in a blocking fashion
     #[inline]
-    fn read_blocking_channel(&mut self, ch: u8) -> u16 {
+    fn read_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
         self.disable_interrupts(Flags::all());
@@ -302,17 +328,17 @@ impl<I: AdcInstance, F> Adc<I, F> {
 
     /// Read into a buffer from the provided ADC pin, in a blocking fashion
     #[inline]
-    pub fn read_buffer_blocking<P: AdcPin<I>>(
+    pub fn read_buffer<P: AdcPin<I>>(
         &mut self,
         _pin: &mut P,
         dst: &mut [u16],
     ) -> Result<(), Error> {
-        self.read_buffer_blocking_channel(P::CHANNEL, dst)
+        self.read_buffer_channel(P::CHANNEL, dst)
     }
 
     /// Read into a buffer from the provided channel, in a blocking fashion
     #[inline]
-    fn read_buffer_blocking_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
+    fn read_buffer_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
         let _ = self.check_and_clear_flags(self.read_flags());
 
@@ -369,38 +395,18 @@ impl<I: AdcInstance, F> Adc<I, F> {
     }
 }
 
-impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
-    /// Read one of the CPU internal voltage supply, and return the value in
-    /// millivolts (Volts/1000)
-    pub fn read_internal_voltage_blocking(&mut self, src: CpuVoltageSource) -> u16 {
-        let chan = src as u8;
-        // Before reading, we have to select VDDANA as our reference voltage
-        // so we get the full 3v3 range
-        if self.cfg.vref != Reference::Intvcc1 {
-            // Modify it
-            self.set_reference(Reference::Intvcc1);
-        }
-
-        let mut adc_val = self.read_blocking_channel(chan);
-        if let Accumulation::Summed(sum) = self.cfg.accumulation {
-            let div: u16 = 2u16.pow(sum as u32);
-            adc_val /= div;
-        }
-        let res = self.reading_to_f32(adc_val) * 3.3 * 4.0;
-
-        // Restore our settings
-        if Reference::Intvcc1 != self.cfg.vref {
-            self.set_reference(self.cfg.vref);
-        }
-        (res * 1000.0) as u16
-    }
-}
-
 #[cfg(feature = "async")]
-impl<I: AdcInstance, F> Adc<I, F>
+/// Implementation for async mode only methods
+impl<I: AdcInstance, F> FutureAdc<I, F>
 where
     F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
 {
+    /// Convert the Async ADC back into a Blocking ADC, and return
+    /// the IRQs
+    pub fn into_blocking(self) -> (Adc<I>, F) {
+        (self.inner, self.irqs)
+    }
+
     /// Read a single value from the provided ADC pin.
     #[inline]
     pub async fn read<P: AdcPin<I>>(&mut self, _pin: &mut P) -> u16 {
@@ -411,17 +417,17 @@ where
     #[inline]
     async fn read_channel(&mut self, ch: u8) -> u16 {
         // Clear overrun errors that might've occured before we try to read anything
-        let _ = self.check_and_clear_flags(self.read_flags());
-        self.disable_freerunning();
-        self.mux(ch);
-        self.power_up();
-        self.start_conversion();
+        let _ = self.inner.check_and_clear_flags(self.inner.read_flags());
+        self.inner.disable_freerunning();
+        self.inner.mux(ch);
+        self.inner.power_up();
+        self.inner.start_conversion();
         // Here we explicitly ignore the result, because we know that
         // overrun errors are impossible since the ADC is configured in one-shot mode.
         let _ = self.wait_flags(Flags::RESRDY).await;
-        let res = self.conversion_result();
-        self.power_down();
-        self.sync();
+        let res = self.inner.conversion_result();
+        self.inner.power_down();
+        self.inner.sync();
         res
     }
 
@@ -439,26 +445,26 @@ where
     #[inline]
     async fn read_buffer_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
-        let _ = self.check_and_clear_flags(self.read_flags());
+        let _ = self.inner.check_and_clear_flags(self.inner.read_flags());
 
-        self.mux(ch);
+        self.inner.mux(ch);
 
-        self.enable_freerunning();
-        self.power_up();
-        self.start_conversion();
+        self.inner.enable_freerunning();
+        self.inner.power_up();
+        self.inner.start_conversion();
 
         for result in dst.iter_mut() {
             if let Err(e) = self.wait_flags(Flags::RESRDY).await {
-                self.power_down();
-                self.disable_freerunning();
+                self.inner.power_down();
+                self.inner.disable_freerunning();
 
                 return Err(e);
             }
-            *result = self.conversion_result();
+            *result = self.inner.conversion_result();
         }
 
-        self.power_down();
-        self.disable_freerunning();
+        self.inner.power_down();
+        self.inner.disable_freerunning();
 
         Ok(())
     }

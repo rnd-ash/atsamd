@@ -1,10 +1,15 @@
-use crate::typelevel::NoneT;
+use super::{
+    Accumulation, Adc, AdcInstance, AdcSettings, CpuVoltageSource, Error, Flags, PrimaryAdc,
+    SampleCount, ADC_SETTINGS_INTERNAL_READ, ADC_SETTINGS_INTERNAL_READ_D21_TEMP,
+};
 
-use super::{Accumulation, Adc, AdcInstance, Error, Flags, PrimaryAdc, SampleCount};
+#[cfg(feature = "async")]
+use super::{async_api, FutureAdc};
 
 use crate::{calibration, pac};
 use pac::adc::inputctrl::Gainselect;
 use pac::Peripherals;
+use pac::Sysctrl;
 pub mod pin;
 
 /// Wrapper around the ADC instance
@@ -46,63 +51,55 @@ impl AdcInstance for Adc0 {
     }
 }
 
-impl<I: AdcInstance> Adc<I, NoneT> {
+impl<I: AdcInstance> Adc<I> {
     #[inline]
-    pub fn configure(&mut self) -> Result<(), super::Error> {
-        // Reset ADC here as we cannot guarantee its state
-        // This also disables the ADC
-        self.software_reset();
+    /// Configures the ADC.
+    pub(crate) fn configure(&mut self, cfg: AdcSettings) {
+        self.power_down();
+        self.sync();
         I::calibrate(&self.adc);
-
-        self.adc.ctrlb().modify(|_, w| {
-            w.prescaler().variant(self.cfg.clk_divider);
-            w.ressel().variant(self.cfg.accumulation.bits())
-        });
+        self.sync();
+        self.adc
+            .ctrlb()
+            .modify(|_, w| w.prescaler().variant(cfg.clk_divider));
+        self.sync();
+        self.adc
+            .ctrlb()
+            .modify(|_, w| w.ressel().variant(cfg.accumulation.resolution()));
         self.sync();
 
         self.adc
             .sampctrl()
-            .modify(|_, w| unsafe { w.samplen().bits(self.cfg.sample_clock_cycles) }); // sample length
-
+            .modify(|_, w| unsafe { w.samplen().bits(cfg.sample_clock_cycles) }); // sample length
+        self.sync();
         self.adc.inputctrl().modify(|_, w| {
-            // No negative input (internal gnd)
             w.muxneg().gnd();
             w.gain().variant(Gainselect::Div2)
-        });
+        }); // No negative input (internal gnd)
         self.sync();
-
-        let (sample_count, adjres) = match self.cfg.accumulation {
+        let (sample_cnt, adjres) = match self.cfg.accumulation {
             // 1 sample to be used as is
             Accumulation::Single(_) => (SampleCount::_1, 0),
             // A total of `adc_sample_count` elements will be averaged by the ADC
             // before it returns the result
-            // SAMD21 datasheet table 32-3 / SAMD11 datasheet table 31-3
+            // Table 45-3 SAMx5x datasheet
             Accumulation::Average(cnt) => (cnt, core::cmp::min(cnt as u8, 0x04)),
             // A total of `adc_sample_count` elements will be summed by the ADC
             // before it returns the result
             Accumulation::Summed(cnt) => (cnt, 0),
         };
-
         self.adc.avgctrl().modify(|_, w| {
-            w.samplenum().variant(sample_count);
+            w.samplenum().variant(sample_cnt);
             unsafe { w.adjres().bits(adjres) }
         });
         self.sync();
-
-        self.set_reference(self.cfg.vref);
+        self.set_reference(cfg.vref);
         self.sync();
-
-        self.disable_freerunning();
-
-        self.power_up();
-
-        Ok(())
+        self.adc.ctrla().modify(|_, w| w.enable().set_bit());
+        self.sync();
+        self.cfg = cfg;
     }
-}
 
-impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {}
-
-impl<I: AdcInstance, T> Adc<I, T> {
     #[inline]
     pub(super) fn sync(&self) {
         while self.adc.status().read().syncbusy().bit_is_set() {
@@ -199,5 +196,83 @@ impl<I: AdcInstance, T> Adc<I, T> {
             .inputctrl()
             .modify(|_, w| unsafe { w.muxpos().bits(ch) });
         self.sync()
+    }
+}
+
+impl<I: AdcInstance + PrimaryAdc> Adc<I> {
+    #[inline]
+    /// Returns the CPU temperature in degrees C
+    ///
+    /// This requires that the [pac::Sysctrl] peripheral is configured with
+    /// the tsen bit enabled, otherwise this function will return an error
+    /// [Error::TemperatureSensorNotEnabled]
+    pub fn read_cpu_temperature(&mut self, sysctrl: &Sysctrl) -> Result<f32, Error> {
+        let vref = sysctrl.vref().read();
+        if vref.tsen().bit_is_clear() {
+            return Err(Error::TemperatureSensorNotEnabled);
+        }
+        let room_temp = calibration::room_temp();
+        let room_reading = calibration::room_temp_adc_val() as f32;
+
+        let hot_temp = calibration::hot_temp();
+        let hot_reading = calibration::hot_temp_adc_val() as f32;
+
+        let room_int1v_ref = 1.0 - (calibration::room_int1v_val() as f32 / 1000.0);
+        let hot_int1v_ref = 1.0 - (calibration::hot_int1v_val() as f32 / 1000.0);
+
+        let room_voltage_compensated = room_reading * room_int1v_ref / 4095.0;
+        let hot_voltage_compensated = hot_reading * hot_int1v_ref / 4095.0;
+
+        let adc_val = self.with_specific_settings(ADC_SETTINGS_INTERNAL_READ_D21_TEMP, |adc| {
+            // IMPORTANT - We also have to modify gain, but this is not exposed in ADC Settings
+            adc.adc.inputctrl().modify(|_, w| w.gain()._1x());
+            let res = adc.read_channel(0x18);
+            // Set gain back to normal
+            adc.adc.inputctrl().modify(|_, w| w.gain().div2());
+            res
+        });
+
+        // Source:
+        // https://github.com/ElectronicCats/ElectronicCats_InternalTemperatureZero/blob/master/src/TemperatureZero.cpp
+        let tsen_val = adc_val as f32 / 4095.0;
+
+        let coarse_temp = room_temp
+            + (((hot_temp - room_temp) / (hot_voltage_compensated - room_voltage_compensated))
+                * (tsen_val - room_voltage_compensated));
+        let ref_1v = room_int1v_ref
+            + (((hot_int1v_ref - room_int1v_ref) * (coarse_temp - room_temp))
+                / (hot_temp - room_temp));
+        let measured_voltage_compensated = adc_val as f32 * ref_1v / 4095.0;
+
+        let temp = room_temp
+            + (((hot_temp - room_temp) / (hot_voltage_compensated - room_voltage_compensated))
+                * (measured_voltage_compensated - room_voltage_compensated));
+
+        Ok(temp)
+    }
+
+    #[inline]
+    pub fn read_cpu_voltage(&mut self, src: CpuVoltageSource) -> u16 {
+        let voltage = self.with_specific_settings(ADC_SETTINGS_INTERNAL_READ, |adc| {
+            let res = adc.read_channel(src as u8);
+            adc.reading_to_f32(res) * 3.3 * 4.0
+        });
+        (voltage * 1000.0) as u16
+    }
+}
+
+#[cfg(feature = "async")]
+impl<I: AdcInstance + PrimaryAdc, F> FutureAdc<I, F>
+where
+    F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
+{
+    /// Reads the CPU temperature. Value returned is in Celcius
+    pub fn read_cpu_temperature(&mut self, sysctrl: &Sysctrl) -> Result<f32, super::Error> {
+        self.inner.read_cpu_temperature(sysctrl)
+    }
+
+    /// Reads one of the CPU voltage source. Value returnned is in millivolts (mV)
+    pub fn read_cpu_voltage(&mut self, src: CpuVoltageSource) -> u16 {
+        self.inner.read_cpu_voltage(src)
     }
 }

@@ -1,12 +1,14 @@
 use core::marker::PhantomData;
 
 use crate::{
-    adc::{Adc, AdcInstance, Error, Flags},
+    adc::{AdcInstance, Error, Flags},
     async_hal::interrupts::Handler,
 };
 
 use atsamd_hal_macros::hal_module;
 use embassy_sync::waitqueue::AtomicWaker;
+
+use super::FutureAdc;
 
 #[allow(clippy::declare_interior_mutable_const)]
 const NEW_WAKER: AtomicWaker = AtomicWaker::new();
@@ -40,7 +42,7 @@ impl<A: AdcInstance> Handler<A::Interrupt> for InterruptHandler<A> {
     }
 }
 
-impl<I: AdcInstance, F> Adc<I, F>
+impl<I: AdcInstance, F> FutureAdc<I, F>
 where
     F: crate::async_hal::interrupts::Binding<I::Interrupt, InterruptHandler<I>>,
 {
@@ -50,29 +52,29 @@ where
 
         // We automatically check for errors
         let flags_to_wait = flags_to_wait | Flags::OVERRUN;
-        self.disable_interrupts(Flags::all());
+        self.inner.disable_interrupts(Flags::all());
 
         core::future::poll_fn(|cx| {
             // Scope maybe_pending so we don't forget to re-poll the register later down.
             {
-                let maybe_pending = self.read_flags();
+                let maybe_pending = self.inner.read_flags();
                 if flags_to_wait.intersects(maybe_pending) {
-                    let result = self.check_and_clear_flags(maybe_pending);
-                    self.disable_interrupts(flags_to_wait);
+                    let result = self.inner.check_and_clear_flags(maybe_pending);
+                    self.inner.disable_interrupts(flags_to_wait);
                     return Poll::Ready(result);
                 }
             }
 
             I::waker().register(cx.waker());
-            self.enable_interrupts(flags_to_wait);
+            self.inner.enable_interrupts(flags_to_wait);
 
-            let maybe_pending = self.read_flags();
+            let maybe_pending = self.inner.read_flags();
 
             if !flags_to_wait.intersects(maybe_pending) {
                 Poll::Pending
             } else {
-                let result = self.check_and_clear_flags(maybe_pending);
-                self.disable_interrupts(flags_to_wait);
+                let result = self.inner.check_and_clear_flags(maybe_pending);
+                self.inner.disable_interrupts(flags_to_wait);
                 Poll::Ready(result)
             }
         })
