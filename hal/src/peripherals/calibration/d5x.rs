@@ -15,7 +15,7 @@ const ADDR: u32 = 0x00800080;
 fn cal(addr_offset: u32, bit_shift: u32, bit_mask: u32) -> u32 {
     unsafe {
         let addr: *const u32 = (ADDR + addr_offset) as *const _;
-        let value = ptr::read(addr);
+        let value = ptr::read_unaligned(addr);
 
         (value >> bit_shift) & bit_mask
     }
