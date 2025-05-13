@@ -45,31 +45,35 @@ pub enum Accumulation {
     /// The result will be in the users chosen bitwidth
     Single(AdcResolution),
     /// The ADC will read [SampleCount] samples, average them out
-    /// into a 16 bit wide value, and then the result is ready.
+    /// and then the result is ready.
     ///
-    /// The result will be in the range of 0-65535 (16bit)
+    /// The result will be in the range of 0-4095 (12bit)
     Average(SampleCount),
     /// The ADC will read [SampleCount] samples, sum them
     /// into a 16 bit wide value, and then the result is ready.
     ///
-    /// The result will be in the range of 0-65535 (16bit)
+    /// The result will be in the range of 0-65535 (16bit),
+    /// but will consist of the sum of multiple 12bit reads
     Summed(SampleCount),
 }
 
 impl Accumulation {
+    /// Read the ADC once
     pub fn single(res: AdcResolution) -> Self {
         Self::Single(res)
     }
 
+    /// Accumulate multiple samples and average together
     pub fn average(count: SampleCount) -> Self {
         Self::Average(count)
     }
 
+    /// Accumulate multiple samples and add them together
     pub fn summed(count: SampleCount) -> Self {
         Self::Summed(count)
     }
 
-    pub(crate) fn bits(&self) -> Resolution {
+    pub(crate) fn resolution(&self) -> Resolution {
         if let Self::Single(res) = self {
             (*res).into()
         } else {
@@ -131,9 +135,9 @@ impl From<super::Error> for BuilderError {
 /// ```
 /// SPS = (GCLK_ADC / clk_divider) / (sample_clock_cycles + bit_width)
 /// ```
-/// ## For multiple samples (Averaging or Summed)
+/// ## For multiple samples 'n' (Averaging or Summed)
 /// ```
-/// SPS = (GCLK_ADC / clk_divider) / (n * (sample_clock_cycles + bit_width))
+/// SPS = (GCLK_ADC / clk_divider) / (n * (sample_clock_cycles + 12))
 /// ```
 #[derive(Copy, Clone)]
 pub struct AdcBuilder {
@@ -145,6 +149,7 @@ pub struct AdcBuilder {
 
 /// Version of [AdcBuilder] without any optional settings.
 /// [AdcBuilder] is converted to this when passed to the ADC
+#[derive(Copy, Clone)]
 pub(crate) struct AdcSettings {
     pub clk_divider: Prescaler,
     pub sample_clock_cycles: u8,
@@ -217,7 +222,7 @@ impl AdcBuilder {
         let div = self.clk_divider.unwrap() as u32;
         let adc_clk_freq = clock_freq / div;
 
-        let bit_width = match self.accumulation.bits() {
+        let bit_width = match self.accumulation.resolution() {
             Resolution::_16bit => 16,
             Resolution::_12bit => 12,
             Resolution::_10bit => 10,

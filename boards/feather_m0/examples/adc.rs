@@ -50,8 +50,8 @@ fn main() -> ! {
     loop {
         #[allow(dead_code)]
         let mut buffer = [0; 16];
-        let res = adc.read_buffer_blocking(&mut adc_pin, &mut buffer).unwrap();
+        let res = adc.read_buffer(&mut adc_pin, &mut buffer).unwrap();
         #[cfg(feature = "use_semihosting")]
-        cortex_m_semihosting::hprintln!("Result: {:?}", res).unwrap();
+        cortex_m_semihosting::hprintln!("Buffer: {:?}", buffer).unwrap();
     }
 }

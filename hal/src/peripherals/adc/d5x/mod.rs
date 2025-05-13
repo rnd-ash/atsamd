@@ -1,9 +1,14 @@
 pub mod pin;
 
+use pac::{adc0::inputctrl::Muxposselect, Supc};
+
+#[cfg(feature = "async")]
+use super::{async_api, FutureAdc};
+
 use super::{
-    Accumulation, Adc, AdcInstance, Error, Flags, PrimaryAdc, SampleCount
+    Accumulation, Adc, AdcInstance, AdcSettings, CpuVoltageSource, Error, Flags, PrimaryAdc,
+    SampleCount, ADC_SETTINGS_INTERNAL_READ,
 };
-use crate::typelevel::NoneT;
 use crate::{calibration, pac};
 
 /// ADC instance 0
@@ -43,6 +48,20 @@ impl AdcInstance for Adc0 {
     }
 }
 
+#[inline]
+/// Convert TP and TC values to degrees C for CPU temperature
+fn tp_tc_to_temp(tp: f32, tc: f32) -> f32 {
+    let tl = calibration::tl();
+    let th = calibration::th();
+    let vpl = calibration::vpl() as f32;
+    let vph = calibration::vph() as f32;
+    let vcl = calibration::vcl() as f32;
+    let vch = calibration::vch() as f32;
+
+    ((tl * vph * tc) - (vpl * th * tc) - (tl * vch * tp) + (th * vcl * tp))
+        / ((vcl * tp) - (vch * tp) - (vpl * tc) + (vph * tc))
+}
+
 /// ADC instance 0
 pub struct Adc1 {
     _adc: pac::Adc1,
@@ -78,27 +97,27 @@ impl AdcInstance for Adc1 {
     }
 }
 
-impl<I: AdcInstance> Adc<I, NoneT> {
+impl<I: AdcInstance> Adc<I> {
     #[inline]
-    pub fn configure(&mut self) -> Result<(), super::Error> {
-        // Reset ADC here as we cannot guarantee its state
-        // This also disables the ADC
-        self.software_reset();
+    /// Configures the ADC.
+    pub(crate) fn configure(&mut self, cfg: AdcSettings) {
+        // Stop ADC
+        self.power_down();
         self.sync();
         I::calibrate(&self.adc);
         self.sync();
         self.adc
             .ctrla()
-            .modify(|_, w| w.prescaler().variant(self.cfg.clk_divider));
+            .modify(|_, w| w.prescaler().variant(cfg.clk_divider));
         self.sync();
         self.adc
             .ctrlb()
-            .modify(|_, w| w.ressel().variant(self.cfg.accumulation.bits()));
+            .modify(|_, w| w.ressel().variant(cfg.accumulation.resolution()));
         self.sync();
 
         self.adc
             .sampctrl()
-            .modify(|_, w| unsafe { w.samplen().bits(self.cfg.sample_clock_cycles) }); // sample length
+            .modify(|_, w| unsafe { w.samplen().bits(cfg.sample_clock_cycles) }); // sample length
         self.sync();
         self.adc.inputctrl().modify(|_, w| {
             w.muxneg().gnd();
@@ -121,59 +140,46 @@ impl<I: AdcInstance> Adc<I, NoneT> {
             unsafe { w.adjres().bits(adjres) }
         });
         self.sync();
-
-        self.set_reference(self.cfg.vref);
+        self.set_reference(cfg.vref);
         self.sync();
-
-        self.disable_freerunning();
-
-        self.power_up();
-
-        Ok(())
+        self.adc.ctrla().modify(|_, w| w.enable().set_bit());
+        self.sync();
+        self.cfg = cfg;
     }
 }
 
-impl<I: AdcInstance + PrimaryAdc, F> Adc<I, F> {
-    #[inline]
-    /// As per the datasheet
-    fn tp_tc_to_temp(&self, tp: f32, tc: f32) -> f32 {
-        let tl = calibration::tl();
-        let th = calibration::th();
-        let vpl = calibration::vpl() as f32;
-        let vph = calibration::vph() as f32;
-        let vcl = calibration::vcl() as f32;
-        let vch = calibration::vch() as f32;
-
-        (tl * vph * tc - vpl * th * tc - tl * vch * tp + th * vcl * tp)
-            / (vcl * tp - vch * tp - vpl * tc + vph * tc)
-    }
-
+impl<I: AdcInstance + PrimaryAdc> Adc<I> {
     #[inline]
     /// Returns the CPU temperature in degrees C
     ///
     /// This requires that the [pac::Supc] peripheral is configured with
     /// tsen and ondemand bits enabled, otherwise this function will return
     /// [Error::TemperatureSensorNotEnabled]
-    pub fn read_cpu_temperature_blocking(&mut self, supc: &pac::Supc) -> Result<f32, Error> {
+    pub fn read_cpu_temperature(&mut self, supc: &pac::Supc) -> Result<f32, Error> {
         let vref = supc.vref().read();
         if vref.tsen().bit_is_clear() || vref.ondemand().bit_is_clear() {
             return Err(Error::TemperatureSensorNotEnabled);
         }
-        let mut tp = self.read_blocking_channel(0x1C) as f32;
-        let mut tc = self.read_blocking_channel(0x1D) as f32;
+        let (tp, tc) = self.with_specific_settings(ADC_SETTINGS_INTERNAL_READ, |adc| {
+            (
+                adc.read_channel(0x1C) as f32, // Tp
+                adc.read_channel(0x1D) as f32, // Tc
+            )
+        });
+        Ok(tp_tc_to_temp(tp, tc))
+    }
 
-        if let Accumulation::Summed(sum) = self.cfg.accumulation {
-            // to prevent incorrect readings, divide by number of samples if the
-            // ADC was already configured in summation mode
-            let div: f32 = (2u16.pow(sum as u32)) as f32;
-            tp /= div;
-            tc /= div;
-        }
-        Ok(self.tp_tc_to_temp(tp, tc))
+    #[inline]
+    pub fn read_cpu_voltage(&mut self, src: CpuVoltageSource) -> u16 {
+        let voltage = self.with_specific_settings(ADC_SETTINGS_INTERNAL_READ, |adc| {
+            let res = adc.read_channel(src as u8);
+            adc.reading_to_f32(res) * 3.3 * 4.0 // x4 since the voltages are 1/4 scaled
+        });
+        (voltage * 1000.0) as u16
     }
 }
 
-impl<I: AdcInstance, T> Adc<I, T> {
+impl<I: AdcInstance> Adc<I> {
     #[inline]
     pub(super) fn sync(&self) {
         // Slightly more performant than checking the individual bits
@@ -198,13 +204,9 @@ impl<I: AdcInstance, T> Adc<I, T> {
 
     #[inline]
     pub(super) fn start_conversion(&mut self) {
-        // The double trigger here is in case the VREF value changed between
-        // reads, this discards the conversion made just after the VREF changed,
-        // which the data sheet tells us to do in order to not get a faulty reading
-        // right after changing VREF value
+        // Bug with ADC - When reference voltage is changed, the first reading
+        // should NOT be used, so we have to do a trigger, reset then reset
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
-        self.sync();
-        self.adc.intflag().write(|w| w.resrdy().set_bit()); // Clear RESRDY
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
     }
 
@@ -272,5 +274,21 @@ impl<I: AdcInstance, T> Adc<I, T> {
             .inputctrl()
             .modify(|_, w| unsafe { w.muxpos().bits(ch) });
         self.sync()
+    }
+}
+
+#[cfg(feature = "async")]
+impl<I: AdcInstance + PrimaryAdc, F> FutureAdc<I, F>
+where
+    F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
+{
+    /// Reads the CPU temperature. Value returned is in Celcius
+    pub fn read_cpu_temperature(&mut self, supc: &Supc) -> Result<f32, super::Error> {
+        self.inner.read_cpu_temperature(supc)
+    }
+
+    /// Reads one of the CPU voltage source. Value returnned is in millivolts (mV)
+    pub fn read_cpu_voltage(&mut self, src: CpuVoltageSource) -> u16 {
+        self.inner.read_cpu_voltage(src)
     }
 }
