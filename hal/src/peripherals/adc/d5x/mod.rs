@@ -229,6 +229,7 @@ impl<I: AdcInstance> Adc<I> {
     }
 
     /// Clear the specified interrupt flags
+    #[cfg(feature = "async")]
     #[inline]
     pub(super) fn clear_flags(&mut self, flags: &Flags) {
         unsafe {

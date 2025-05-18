@@ -151,6 +151,7 @@ impl<I: AdcInstance> Adc<I> {
     }
 
     /// Clear the specified interrupt flags
+    #[cfg(feature = "async")]
     #[inline]
     pub(super) fn clear_flags(&mut self, flags: &Flags) {
         unsafe {
@@ -162,6 +163,7 @@ impl<I: AdcInstance> Adc<I> {
     #[inline]
     pub(super) fn clear_all_flags(&mut self) {
         unsafe {
+            // nb SAMD1x and SAMD2x have a SYNCRDY flag, SAMx5x doesn't
             self.adc.intflag().write(|w| w.bits(0b1111));
         }
     }
