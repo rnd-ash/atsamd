@@ -42,7 +42,8 @@ fn main() -> ! {
         .with_clock_cycles_per_sample(5)
         // Overruns if clock divider < 128 in debug mode
         .with_clock_divider(Prescaler::Div128)
-        .enable(peripherals.adc,&mut peripherals.pm,&adc_clock)
+        .with_vref(Reference::Arefa)
+        .enable(peripherals.adc, &mut peripherals.pm, &adc_clock)
         .unwrap();
 
     let mut adc_pin = pins.d1.into_alternate();
