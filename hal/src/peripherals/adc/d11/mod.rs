@@ -55,6 +55,10 @@ impl<I: AdcInstance> Adc<I> {
     #[inline]
     /// Configures the ADC.
     pub(crate) fn configure(&mut self, cfg: AdcSettings) {
+        if cfg != self.cfg {
+            // Set discard flag for next read
+            self.discard = true;
+        }
         self.power_down();
         self.sync();
         I::calibrate(&self.adc);
@@ -98,6 +102,7 @@ impl<I: AdcInstance> Adc<I> {
         self.adc.ctrla().modify(|_, w| w.enable().set_bit());
         self.sync();
         self.cfg = cfg;
+        self.power_up();
     }
 
     #[inline]
@@ -122,14 +127,8 @@ impl<I: AdcInstance> Adc<I> {
 
     #[inline]
     pub(super) fn start_conversion(&mut self) {
-        // The double trigger here is in case the VREF value changed between
-        // reads, this discards the conversion made just after the VREF changed,
-        // which the data sheet tells us to do in order to not get a faulty reading
-        // right after changing VREF value
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
         self.sync();
-        self.adc.intflag().write(|w| w.resrdy().set_bit()); // Clear RESRDY
-        self.adc.swtrig().modify(|_, w| w.start().set_bit());
     }
 
     #[inline]
@@ -151,7 +150,6 @@ impl<I: AdcInstance> Adc<I> {
     }
 
     /// Clear the specified interrupt flags
-    #[cfg(feature = "async")]
     #[inline]
     pub(super) fn clear_flags(&mut self, flags: &Flags) {
         unsafe {
@@ -163,7 +161,6 @@ impl<I: AdcInstance> Adc<I> {
     #[inline]
     pub(super) fn clear_all_flags(&mut self) {
         unsafe {
-            // nb SAMD1x and SAMD2x have a SYNCRDY flag, SAMx5x doesn't
             self.adc.intflag().write(|w| w.bits(0b1111));
         }
     }
@@ -198,6 +195,10 @@ impl<I: AdcInstance> Adc<I> {
 
     #[inline]
     pub(super) fn mux(&mut self, ch: u8) {
+        if self.adc.inputctrl().read().muxpos().bits() as u8 != ch {
+            // We should discard the next result
+            self.discard = true;
+        }
         self.adc
             .inputctrl()
             .modify(|_, w| unsafe { w.muxpos().bits(ch) });

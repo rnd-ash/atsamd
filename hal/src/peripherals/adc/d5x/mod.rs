@@ -1,6 +1,6 @@
 pub mod pin;
 
-use pac::Supc;
+use pac::{adc0::inputctrl::Muxposselect, Supc};
 
 #[cfg(feature = "async")]
 use super::{async_api, FutureAdc};
@@ -101,6 +101,10 @@ impl<I: AdcInstance> Adc<I> {
     #[inline]
     /// Configures the ADC.
     pub(crate) fn configure(&mut self, cfg: AdcSettings) {
+        if cfg != self.cfg {
+            // Set discard flag for next read
+            self.discard = true;
+        }
         // Stop ADC
         self.power_down();
         self.sync();
@@ -145,6 +149,7 @@ impl<I: AdcInstance> Adc<I> {
         self.adc.ctrla().modify(|_, w| w.enable().set_bit());
         self.sync();
         self.cfg = cfg;
+        self.power_up();
     }
 }
 
@@ -204,9 +209,6 @@ impl<I: AdcInstance> Adc<I> {
 
     #[inline]
     pub(super) fn start_conversion(&mut self) {
-        // Bug with ADC - When reference voltage is changed, the first reading
-        // should NOT be used, so we have to do a trigger, reset then reset
-        self.adc.swtrig().modify(|_, w| w.start().set_bit());
         self.adc.swtrig().modify(|_, w| w.start().set_bit());
     }
 
@@ -229,7 +231,6 @@ impl<I: AdcInstance> Adc<I> {
     }
 
     /// Clear the specified interrupt flags
-    #[cfg(feature = "async")]
     #[inline]
     pub(super) fn clear_flags(&mut self, flags: &Flags) {
         unsafe {
@@ -275,6 +276,10 @@ impl<I: AdcInstance> Adc<I> {
 
     #[inline]
     pub(super) fn mux(&mut self, ch: u8) {
+        if self.adc.inputctrl().read().muxpos().bits() as u8 != ch {
+            // We should discard the next result
+            self.discard = true;
+        }
         self.adc
             .inputctrl()
             .modify(|_, w| unsafe { w.muxpos().bits(ch) });

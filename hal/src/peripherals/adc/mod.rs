@@ -149,6 +149,7 @@ where
 pub struct Adc<I: AdcInstance> {
     adc: I::Instance,
     cfg: AdcSettings,
+    discard: bool,
 }
 
 /// ADC Instance
@@ -157,6 +158,7 @@ pub struct Adc<I: AdcInstance> {
     adc: I::Instance,
     _apbclk: crate::clock::v2::apb::ApbClk<I::ClockId>,
     cfg: AdcSettings,
+    discard: bool,
 }
 
 #[cfg(feature = "async")]
@@ -207,6 +209,7 @@ impl<I: AdcInstance> Adc<I> {
             adc,
             _apbclk: clk,
             cfg: settings,
+            discard: true,
         };
         new_adc.configure(settings);
         Ok(new_adc)
@@ -216,9 +219,9 @@ impl<I: AdcInstance> Adc<I> {
     ///
     /// ## Important
     ///
-    /// This function will return [Error::ClockTooFast] if the clock source
-    /// provided is faster than 48 MHz, since this is the maximum frequency
-    /// for the ADC as per the datasheet.
+    /// This function will return [Error::ClockTooFast] if the clock source provided
+    /// is faster than 48 MHz, since this is the maximum frequency for the
+    /// ADC as per the datasheet.
     #[hal_cfg(any("adc-d11", "adc-d21"))]
     #[inline]
     pub(crate) fn new(
@@ -233,14 +236,18 @@ impl<I: AdcInstance> Adc<I> {
         }
 
         I::enable_pm(pm);
-        let mut new_adc = Self { adc, cfg: settings };
+        let mut new_adc = Self {
+            adc,
+            cfg: settings,
+            discard: true,
+        };
         new_adc.configure(settings);
         Ok(new_adc)
     }
 
-    /// Switch the ['Adc'] to ['FutureAdc'], allowing for the use of async
-    /// reading methods. You are required to provide the struct created by
-    /// the [`bind_interrupts`](crate::bind_interrupts) macro to prove
+    /// Switch the ['Adc'] to ['FutureAdc'], allowing for the use of async reading
+    /// methods. You are required to provide the struct created by the
+    /// [`bind_interrupts`](crate::bind_interrupts) macro to prove
     /// that the interrupt sources have been correctly configured. This function
     /// will automatically enable the relevant NVIC interrupt sources. However,
     /// you are required to configure the desired interrupt priorities prior to
@@ -316,14 +323,28 @@ impl<I: AdcInstance> Adc<I> {
         self.disable_freerunning();
         self.sync();
         self.mux(ch);
-        self.power_up();
+        self.check_read_discard();
         self.start_conversion();
         while !self.read_flags().contains(Flags::RESRDY) {
             core::hint::spin_loop();
         }
+        // Do it again if we had a settings change
         let res = self.conversion_result();
-        self.power_down();
         res
+    }
+
+    // If the ADC has to discard the next value, then we try to read it
+    // and then discard it
+    #[inline]
+    pub fn check_read_discard(&mut self) {
+        if self.discard {
+            self.start_conversion();
+            while !self.read_flags().contains(Flags::RESRDY) {
+                core::hint::spin_loop();
+            }
+            self.discard = false;
+            let _ = self.conversion_result();
+        }
     }
 
     /// Read into a buffer from the provided ADC pin, in a blocking fashion
@@ -341,13 +362,19 @@ impl<I: AdcInstance> Adc<I> {
     fn read_buffer_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
         self.clear_all_flags();
-
         self.disable_interrupts(Flags::all());
         self.mux(ch);
-
         self.enable_freerunning();
-        self.power_up();
         self.start_conversion();
+        if self.discard {
+            // Discard first result
+            while !self.read_flags().contains(Flags::RESRDY) {
+                core::hint::spin_loop();
+            }
+            self.clear_all_flags();
+            let _ = self.conversion_result();
+            self.discard = false;
+        }
 
         for result in dst.iter_mut() {
             while !self.read_flags().contains(Flags::RESRDY) {
@@ -357,7 +384,7 @@ impl<I: AdcInstance> Adc<I> {
             let flags = self.read_flags();
             self.clear_all_flags();
             if let Err(e) = self.check_overrun(&flags) {
-                self.power_down();
+                //self.power_down();
                 self.disable_freerunning();
 
                 return Err(e);
@@ -365,7 +392,7 @@ impl<I: AdcInstance> Adc<I> {
 
             *result = self.conversion_result();
         }
-        self.power_down();
+        //self.power_down();
         self.disable_freerunning();
 
         Ok(())
@@ -422,13 +449,19 @@ where
         self.inner.clear_all_flags();
         self.inner.disable_freerunning();
         self.inner.mux(ch);
-        self.inner.power_up();
+        if self.inner.discard {
+            // Read and discard if something was changed
+            self.inner.start_conversion();
+            let _ = self.wait_flags(Flags::RESRDY).await;
+            self.inner.discard = false;
+            let _ = self.inner.conversion_result();
+        }
         self.inner.start_conversion();
         // Here we explicitly ignore the result, because we know that
         // overrun errors are impossible since the ADC is configured in one-shot mode.
         let _ = self.wait_flags(Flags::RESRDY).await;
         let res = self.inner.conversion_result();
-        self.inner.power_down();
+        //self.inner.power_down();
         self.inner.sync();
         res
     }
@@ -448,16 +481,21 @@ where
     async fn read_buffer_channel(&mut self, ch: u8, dst: &mut [u16]) -> Result<(), Error> {
         // Clear overrun errors that might've occured before we try to read anything
         self.inner.clear_all_flags();
-
         self.inner.mux(ch);
-
         self.inner.enable_freerunning();
-        self.inner.power_up();
-        self.inner.start_conversion();
 
+        if self.inner.discard {
+            // Discard first result
+            let _ = self.wait_flags(Flags::RESRDY).await;
+            let _ = self.inner.conversion_result();
+            self.inner.discard = false;
+            self.inner.clear_all_flags();
+        }
+
+        // Don't re-trigger start conversion now, its already enabled in free running
         for result in dst.iter_mut() {
             if let Err(e) = self.wait_flags(Flags::RESRDY).await {
-                self.inner.power_down();
+                //self.inner.power_down();
                 self.inner.disable_freerunning();
 
                 return Err(e);
@@ -465,7 +503,7 @@ where
             *result = self.inner.conversion_result();
         }
 
-        self.inner.power_down();
+        //self.inner.power_down();
         self.inner.disable_freerunning();
 
         Ok(())
