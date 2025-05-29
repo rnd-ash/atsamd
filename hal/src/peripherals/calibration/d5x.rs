@@ -27,7 +27,7 @@ fn parts_to_f32(int: u32, dec: u32) -> f32 {
 
     if dec < 10.0 {
         dec /= 10.0;
-    } else if dec <= 100.0 {
+    } else if dec < 100.0 {
         dec /= 100.0;
     } else {
         dec /= 1000.0;
