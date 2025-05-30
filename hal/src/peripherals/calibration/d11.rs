@@ -40,17 +40,9 @@ fn cal_with_errata(
 }
 
 // Needed for temperature calibration values stored in NVM
-fn parts_to_f32(int: u32, dec: u32) -> f32 {
-    let mut dec = dec as f32;
-
-    if dec < 10.0 {
-        dec /= 10.0;
-    } else if dec < 100.0 {
-        dec /= 100.0;
-    } else {
-        dec /= 1000.0;
-    }
-    int as f32 + dec
+fn parts_to_f32(int: u32, dec: u32, n_bits: u32) -> f32 {
+    let mul: f32 = 1f32/(2u32.pow(n_bits) as f32);
+    int as f32 + (dec as f32 * mul)
 }
 
 /// ADC Linearity Calibration. Should be written to ADC CALIB register.
@@ -102,14 +94,14 @@ pub fn usb_trim_cal() -> u8 {
 pub fn room_temp() -> f32 {
     let int_val = cal(0x10, 0, 0b11111111);
     let dec_val = cal(0x10 + 1, 0, 0b1111);
-    parts_to_f32(int_val, dec_val)
+    parts_to_f32(int_val, dec_val, 4)
 }
 
 /// Hot temperature in °C
 pub fn hot_temp() -> f32 {
     let int_val = cal(0x10 + 1, 4, 0b11111111);
     let dec_val = cal(0x10 + 2, 4, 0b1111);
-    parts_to_f32(int_val, dec_val)
+    parts_to_f32(int_val, dec_val, 4)
 }
 
 pub fn room_int1v_val() -> u32 {
