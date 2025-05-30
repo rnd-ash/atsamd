@@ -293,6 +293,18 @@ where
     F: crate::async_hal::interrupts::Binding<I::Interrupt, async_api::InterruptHandler<I>>,
 {
     /// Reads the CPU temperature. Value returned is in Celcius
+    /// This methods requires the provided supc peripheral has the ondemand and tsen
+    /// bits enabled.
+    ///
+    /// Example:
+    /// ```
+    /// let supc = peripherals.supc;
+    /// supc.vref()
+    ///     .write(|w| {
+    ///         w.ondemand().set_bit();
+    ///         w.tsen().set_bit()
+    ///     });
+    /// ```
     pub fn read_cpu_temperature(&mut self, supc: &Supc) -> Result<f32, super::Error> {
         self.inner.read_cpu_temperature(supc)
     }
