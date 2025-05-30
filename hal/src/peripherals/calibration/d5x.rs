@@ -21,20 +21,6 @@ fn cal(addr_offset: u32, bit_shift: u32, bit_mask: u32) -> u32 {
     }
 }
 
-// Needed for temperature calibration values stored in NVM
-fn parts_to_f32(int: u32, dec: u32) -> f32 {
-    let mut dec = dec as f32;
-
-    if dec < 10.0 {
-        dec /= 10.0;
-    } else if dec < 100.0 {
-        dec /= 100.0;
-    } else {
-        dec /= 1000.0;
-    }
-    int as f32 + dec
-}
-
 /// USB TRANSN calibration value. Should be written to USB PADCAL register.
 pub fn usb_transn_cal() -> u8 {
     cal(4, 0, 0b11111) as u8
@@ -82,12 +68,12 @@ pub fn adc1_biasr2r_scale_cal() -> u8 {
 
 /// Calibration temperature parameter 'TL', formed by TLI and TLD (TL'Integer', TL'Decimal')
 pub fn tl() -> f32 {
-    parts_to_f32(tli(), tld())
+    (tli() * 10 + tld()) as f32 / 10.0
 }
 
 /// Calibration temperature parameter 'TH', formed by THI and THD (TH'Integer', TH'Decimal')
 pub fn th() -> f32 {
-    parts_to_f32(thi(), thd())
+    (thi() * 10 + thd()) as f32 / 10.0
 }
 
 /// Temperature calibration - Integer part of calibration temperature TL
