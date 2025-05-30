@@ -39,20 +39,6 @@ fn cal_with_errata(
     }
 }
 
-// Needed for temperature calibration values stored in NVM
-fn parts_to_f32(int: u32, dec: u32) -> f32 {
-    let mut dec = dec as f32;
-
-    if dec < 10.0 {
-        dec /= 10.0;
-    } else if dec < 100.0 {
-        dec /= 100.0;
-    } else {
-        dec /= 1000.0;
-    }
-    int as f32 + dec
-}
-
 /// ADC Linearity Calibration. Should be written to ADC CALIB register.
 #[allow(clippy::unusual_byte_groupings)]
 pub fn adc_linearity_cal() -> u8 {
@@ -102,14 +88,16 @@ pub fn usb_trim_cal() -> u8 {
 pub fn room_temp() -> f32 {
     let int_val = cal(0x10, 0, 0b11111111);
     let dec_val = cal(0x10 + 1, 0, 0b1111);
-    parts_to_f32(int_val, dec_val)
+    
+    (int_val * 10 + dec_val) as f32 / 10.0
 }
 
 /// Hot temperature in °C
 pub fn hot_temp() -> f32 {
     let int_val = cal(0x10 + 1, 4, 0b11111111);
     let dec_val = cal(0x10 + 2, 4, 0b1111);
-    parts_to_f32(int_val, dec_val)
+
+    (int_val * 10 + dec_val) as f32 / 10.0
 }
 
 pub fn room_int1v_val() -> u32 {
