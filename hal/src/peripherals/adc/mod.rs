@@ -33,7 +33,7 @@ pub use adc0::refctrl::Refselselect as Reference;
 /// ADC Settings when reading Internal sensors (Like VREF and Temperatures)
 /// These settings are based on the minimums suggested in the datasheet
 const ADC_SETTINGS_INTERNAL_READ: AdcSettings = AdcSettings {
-    clk_divider: Prescaler::Div64,
+    clk_divider: Prescaler::Div128,
     sample_clock_cycles: 6,
     accumulation: Accumulation::Single(AdcResolution::_12),
     vref: Reference::Intvcc1,
@@ -42,9 +42,9 @@ const ADC_SETTINGS_INTERNAL_READ: AdcSettings = AdcSettings {
 /// Based on Temperature log row information (NVM)x
 #[hal_cfg(any("adc-d21", "adc-d11"))]
 const ADC_SETTINGS_INTERNAL_READ_D21_TEMP: AdcSettings = AdcSettings {
-    clk_divider: Prescaler::Div256,
-    sample_clock_cycles: 64,
-    accumulation: Accumulation::Single(AdcResolution::_12),
+    clk_divider: Prescaler::Div32,
+    sample_clock_cycles: 4,
+    accumulation: Accumulation::average(SampleCount::_4),
     vref: Reference::Int1v,
 };
 

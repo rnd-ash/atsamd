@@ -59,17 +59,17 @@ pub enum Accumulation {
 
 impl Accumulation {
     /// Read the ADC once
-    pub fn single(res: AdcResolution) -> Self {
+    pub const fn single(res: AdcResolution) -> Self {
         Self::Single(res)
     }
 
     /// Accumulate multiple samples and average together
-    pub fn average(count: SampleCount) -> Self {
+    pub const fn average(count: SampleCount) -> Self {
         Self::Average(count)
     }
 
     /// Accumulate multiple samples and add them together
-    pub fn summed(count: SampleCount) -> Self {
+    pub const fn summed(count: SampleCount) -> Self {
         Self::Summed(count)
     }
 

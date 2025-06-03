@@ -22,6 +22,15 @@ fn cal(addr_offset: u32, bit_shift: u32, bit_mask: u32) -> u32 {
     }
 }
 
+fn cal_signed(addr_offset: u32, bit_shift: u32, bit_mask: i32) -> i32 {
+    unsafe {
+        let addr: *const i32 = (ADDR + addr_offset) as *const _;
+        let value = ptr::read_unaligned(addr);
+
+        (value >> bit_shift) & bit_mask
+    }
+}
+
 fn cal_with_errata(
     addr_offset: u32,
     bit_shift: u32,
@@ -41,7 +50,7 @@ fn cal_with_errata(
 
 // Needed for temperature calibration values stored in NVM
 fn parts_to_f32(int: u32, dec: u32, n_bits: u32) -> f32 {
-    let mul: f32 = 1f32/(2u32.pow(n_bits) as f32);
+    let mul: f32 = 1f32 / (2u32.pow(n_bits) as f32);
     int as f32 + (dec as f32 * mul)
 }
 
@@ -93,23 +102,23 @@ pub fn usb_trim_cal() -> u8 {
 /// Room temperature in °C
 pub fn room_temp() -> f32 {
     let int_val = cal(0x10, 0, 0b11111111);
-    let dec_val = cal(0x10 + 1, 0, 0b1111);
-    parts_to_f32(int_val, dec_val, 4)
+    let dec_val = cal(0x10 + 1, 0, 0b1111) as f32 / 10.0;
+    int_val as f32 + dec_val
 }
 
 /// Hot temperature in °C
 pub fn hot_temp() -> f32 {
     let int_val = cal(0x10 + 1, 4, 0b11111111);
-    let dec_val = cal(0x10 + 2, 4, 0b1111);
-    parts_to_f32(int_val, dec_val, 4)
+    let dec_val = cal(0x10 + 2, 4, 0b1111) as f32 / 10.0;
+    int_val as f32 + dec_val
 }
 
-pub fn room_int1v_val() -> u32 {
-    cal(0x10 + 3, 0, 0b11111111)
+pub fn room_int1v_val() -> i32 {
+    cal_signed(0x10 + 3, 0, 0b11111111)
 }
 
-pub fn hot_int1v_val() -> u32 {
-    cal(0x10 + 4, 0, 0b11111111)
+pub fn hot_int1v_val() -> i32 {
+    cal_signed(0x10 + 4, 0, 0b11111111)
 }
 
 /// 12-bit ADC conversion at room temperature
