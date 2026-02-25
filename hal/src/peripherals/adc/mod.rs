@@ -320,6 +320,7 @@ impl<I: AdcInstance> Adc<I> {
             while !self.read_flags().contains(Flags::RESRDY) {
                 core::hint::spin_loop();
             }
+            self.clear_all_flags();
             self.discard = false;
         }
     }
@@ -343,15 +344,7 @@ impl<I: AdcInstance> Adc<I> {
         self.mux(ch);
         self.enable_freerunning();
         self.start_conversion();
-        if self.discard {
-            // Discard first result
-            while !self.read_flags().contains(Flags::RESRDY) {
-                core::hint::spin_loop();
-            }
-            self.clear_all_flags();
-            self.discard = false;
-        }
-
+        self.check_read_discard();
         for result in dst.iter_mut() {
             while !self.read_flags().contains(Flags::RESRDY) {
                 core::hint::spin_loop();
@@ -421,7 +414,7 @@ where
             self.inner.start_conversion();
             let _ = self.wait_flags(Flags::RESRDY).await;
             self.inner.discard = false;
-            let _ = self.inner.conversion_result();
+            self.inner.clear_all_flags();
         }
         self.inner.start_conversion();
         // Here we explicitly ignore the result, because we know that
