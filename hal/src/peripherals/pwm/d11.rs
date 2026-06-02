@@ -57,6 +57,15 @@ impl $TYPE {
         }
     }
 
+    #[inline]
+    // Disables the TC, then releases it
+    pub fn free(self) -> crate::pac::$TC {
+        let count = self.tc.count16();
+        count.ctrla().write(|w| w.swrst().set_bit());
+        while count.ctrla().read().bits() & 1 != 0 {}
+        self.tc
+    }
+
     pub fn set_period(&mut self, period: Hertz)
     {
         let params = TimerParams::new(period, self.clock_freq);
@@ -97,7 +106,7 @@ impl $crate::ehal::pwm::SetDutyCycle for $TYPE {
     fn max_duty_cycle(&self) -> u16 {
         let count = self.tc.count16();
         let top = count.cc(0).read().cc().bits();
-        top
+        top.saturating_add(1)
     }
 
     fn set_duty_cycle(&mut self, duty: u16) -> Result<(), Self::Error> {
@@ -252,7 +261,7 @@ impl $crate::ehal_02::Pwm for $TYPE {
 
     fn get_max_duty(&self) -> Self::Duty {
         let top = self.tcc.per().read().bits();
-        top
+        top + 1
     }
 
     fn set_duty(&mut self, channel: Self::Channel, duty: Self::Duty) {
