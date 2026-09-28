@@ -4,12 +4,12 @@ use crate::ehal;
 
 #[hal_cfg(any("sercom0-d11", "sercom0-d21"))]
 use crate::pac::sercom0::Spim;
-#[hal_cfg("sercom0-d5x")]
+#[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
 use crate::pac::sercom0::Spim;
 
 #[hal_cfg(any("sercom0-d11", "sercom0-d21"))]
 use crate::pac::sercom0::spim::ctrla::Modeselect;
-#[hal_cfg("sercom0-d5x")]
+#[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
 use crate::pac::sercom0::spim::ctrla::Modeselect;
 
 use crate::sercom::Sercom;
@@ -42,7 +42,7 @@ impl<S: Sercom> Registers<S> {
         self.sercom.spim()
     }
 
-    #[hal_cfg("sercom0-d5x")]
+    #[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
     #[inline]
     pub fn spi(&self) -> &Spim {
         self.sercom.spim()
@@ -75,8 +75,9 @@ impl<S: Sercom> Registers<S> {
     #[hal_macro_helper]
     pub fn set_op_mode(&mut self, mode: Modeselect, mssen: bool) {
         self.spi().ctrla().modify(|_, w| w.mode().variant(mode));
+        #[hal_cfg(not("sercom0-pic32cxsg"))]
         self.spi().ctrlb().modify(|_, w| w.mssen().bit(mssen));
-        #[hal_cfg("sercom0-d5x")]
+        #[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
         self.spi().ctrlc().write(|w| unsafe {
             w.data32b().data_trans_32bit();
             w.icspace().bits(1)
@@ -85,14 +86,14 @@ impl<S: Sercom> Registers<S> {
     }
 
     /// Return the current transaction length
-    #[hal_cfg("sercom0-d5x")]
+    #[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
     #[inline]
     pub fn get_length(&self) -> u8 {
         self.spi().length().read().len().bits()
     }
 
     /// Set the transaction length
-    #[hal_cfg("sercom0-d5x")]
+    #[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
     #[inline]
     pub fn set_length(&mut self, length: u8) {
         let length = if length == 0 { 1 } else { length };

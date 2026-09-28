@@ -36,7 +36,7 @@ use pac::Rtc;
 // Import prescaler divider enum
 #[hal_cfg(any("rtc-d11", "rtc-d21"))]
 use crate::pac::rtc::mode0::ctrl::Prescalerselect;
-#[hal_cfg("rtc-d5x")]
+#[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
 use crate::pac::rtc::mode0::ctrla::Prescalerselect;
 
 /// Type-level enum for RTC interrupts.
@@ -146,7 +146,7 @@ pub trait RtcMode {
         #[hal_cfg(any("rtc-d11", "rtc-d21"))]
         return rtc.mode0().status().read().syncbusy().bit_is_set();
         // SYNC: None
-        #[hal_cfg("rtc-d5x")]
+        #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
         return rtc.mode0().syncbusy().read().bits() != 0;
     }
 
@@ -164,14 +164,14 @@ pub trait RtcMode {
         Self::sync(rtc);
         #[hal_cfg(any("rtc-d11", "rtc-d21"))]
         rtc.mode0().ctrl().modify(|_, w| w.swrst().set_bit());
-        #[hal_cfg("rtc-d5x")]
+        #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
         rtc.mode0().ctrla().modify(|_, w| w.swrst().set_bit());
 
         // Wait for the reset to complete
         // SYNC: Write (we just read though)
         #[hal_cfg(any("rtc-d11", "rtc-d21"))]
         while rtc.mode0().ctrl().read().swrst().bit_is_set() {}
-        #[hal_cfg("rtc-d5x")]
+        #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
         // NOTE: There is also a SWRST bit in the SYNCBUSY register but the bit CTRLA register
         // is the one that clears when the reset is complete.
         while rtc.mode0().ctrla().read().swrst().bit_is_set() {}
@@ -191,7 +191,7 @@ pub trait RtcMode {
         rtc.mode0()
             .ctrl()
             .modify(|_, w| w.prescaler().variant(divider));
-        #[hal_cfg("rtc-d5x")]
+        #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
         rtc.mode0()
             .ctrla()
             .modify(|_, w| w.prescaler().variant(divider));
@@ -209,7 +209,7 @@ pub trait RtcMode {
         Self::enable(rtc);
 
         // Enable counter sync on SAMx5x, the counter cannot be read otherwise.
-        #[hal_cfg("rtc-d5x")]
+        #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
         {
             // Enable counter synchronization
             // NOTE: This register and field are the same in all modes.
@@ -297,7 +297,7 @@ pub trait RtcMode {
         Self::sync(rtc);
         #[hal_cfg(any("rtc-d11", "rtc-d21"))]
         rtc.mode0().ctrl().modify(|_, w| w.enable().clear_bit());
-        #[hal_cfg("rtc-d5x")]
+        #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
         rtc.mode0().ctrla().modify(|_, w| w.enable().clear_bit());
     }
 
@@ -315,7 +315,7 @@ pub trait RtcMode {
 
         #[hal_cfg(any("rtc-d11", "rtc-d21"))]
         rtc.mode0().ctrl().modify(|_, w| w.enable().set_bit());
-        #[hal_cfg("rtc-d5x")]
+        #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
         rtc.mode0().ctrla().modify(|_, w| w.enable().set_bit());
     }
 
@@ -351,10 +351,10 @@ pub mod mode0 {
 
     create_rtc_interrupt!(mode0, Compare0, cmp0);
     #[cfg(feature = "rtic")]
-    #[hal_cfg("rtc-d5x")]
+    #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
     create_rtc_interrupt!(mode0, Compare1, cmp1);
     #[cfg(feature = "rtic")]
-    #[hal_cfg("rtc-d5x")]
+    #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
     create_rtc_interrupt!(mode0, Overflow, ovf);
 
     /// The RTC operating in MODE0 (32-bit COUNT)
@@ -373,7 +373,7 @@ pub mod mode0 {
             // SYNC: None
             #[hal_cfg(any("rtc-d11", "rtc-d21"))]
             rtc.mode0().ctrl().modify(|_, w| w.matchclr().bit(enable));
-            #[hal_cfg("rtc-d5x")]
+            #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
             rtc.mode0().ctrla().modify(|_, w| w.matchclr().bit(enable));
         }
     }
@@ -388,7 +388,7 @@ pub mod mode0 {
             // SYNC: None (for these bits)
             #[hal_cfg(any("rtc-d11", "rtc-d21"))]
             rtc.mode0().ctrl().modify(|_, w| w.mode().count32());
-            #[hal_cfg("rtc-d5x")]
+            #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
             rtc.mode0().ctrla().modify(|_, w| w.mode().count32());
         }
 
@@ -401,7 +401,7 @@ pub mod mode0 {
                 #[hal_cfg(any("rtc-d11", "rtc-d21"))]
                 rtc.mode0().comp().write(|w| w.comp().bits(value));
 
-                #[hal_cfg("rtc-d5x")]
+                #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
                 rtc.mode0().comp(_number).write(|w| w.comp().bits(value));
             }
         }
@@ -414,7 +414,7 @@ pub mod mode0 {
             #[hal_cfg(any("rtc-d11", "rtc-d21"))]
             let cmp = rtc.mode0().comp().read().bits();
 
-            #[hal_cfg("rtc-d5x")]
+            #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
             let cmp = rtc.mode0().comp(_number).read().bits();
 
             cmp
@@ -470,7 +470,7 @@ pub mod mode1 {
             // NOTE: This register and field are the same in all modes.
             #[hal_cfg(any("rtc-d11", "rtc-d21"))]
             rtc.mode0().ctrl().modify(|_, w| w.mode().count16());
-            #[hal_cfg("rtc-d5x")]
+            #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
             rtc.mode0().ctrla().modify(|_, w| w.mode().count16());
 
             // Set the mode 1 period
@@ -557,9 +557,9 @@ pub mod mode2 {
     from_reg_datetime!(clock);
     #[hal_cfg(any("rtc-d11", "rtc-d21"))]
     from_reg_datetime!(alarm);
-    #[hal_cfg("rtc-d5x")]
+    #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
     from_reg_datetime!(alarm0);
-    #[hal_cfg("rtc-d5x")]
+    #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
     from_reg_datetime!(alarm1);
 
     /// Macro to write to the clock or alarm registers.
@@ -597,7 +597,7 @@ pub mod mode2 {
             // NOTE: This register and field are the same in all modes.
             #[hal_cfg(any("rtc-d11", "rtc-d21"))]
             rtc.mode0().ctrl().modify(|_, w| w.mode().clock());
-            #[hal_cfg("rtc-d5x")]
+            #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
             rtc.mode0().ctrla().modify(|_, w| w.mode().clock());
         }
 
@@ -609,7 +609,7 @@ pub mod mode2 {
 
             #[hal_cfg(any("rtc-d11", "rtc-d21"))]
             rtc.mode2().alarm().write(|w| write_datetime!(w, value));
-            #[hal_cfg("rtc-d5x")]
+            #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
             if _number == 0 {
                 rtc.mode2().alarm0().write(|w| write_datetime!(w, value));
             } else {
@@ -624,7 +624,7 @@ pub mod mode2 {
             // SYNC: Write (we just read though)
             #[hal_cfg(any("rtc-d11", "rtc-d21"))]
             return rtc.mode2().alarm().read().into();
-            #[hal_cfg("rtc-d5x")]
+            #[hal_cfg(any("rtc-d5x", "rtc-pic32cxsg"))]
             if _number == 0 {
                 rtc.mode2().alarm0().read().into()
             } else {

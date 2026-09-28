@@ -118,31 +118,31 @@ impl From<DynPinMode> for ModeFields {
                     G => {
                         fields.pmux = 6;
                     }
-                    #[hal_cfg(any("port-d21", "port-d5x"))]
+                    #[hal_cfg(any("port-d21", "port-d5x", "port-pic32cxsg"))]
                     H => {
                         fields.pmux = 7;
                     }
-                    #[hal_cfg("port-d5x")]
+                    #[hal_cfg(any("port-d5x", "port-pic32cxsg"))]
                     I => {
                         fields.pmux = 8;
                     }
-                    #[hal_cfg("port-d5x")]
+                    #[hal_cfg(any("port-d5x", "port-pic32cxsg"))]
                     J => {
                         fields.pmux = 9;
                     }
-                    #[hal_cfg("port-d5x")]
+                    #[hal_cfg(any("port-d5x", "port-pic32cxsg"))]
                     K => {
                         fields.pmux = 10;
                     }
-                    #[hal_cfg("port-d5x")]
+                    #[hal_cfg(any("port-d5x", "port-pic32cxsg"))]
                     L => {
                         fields.pmux = 11;
                     }
-                    #[hal_cfg("port-d5x")]
+                    #[hal_cfg(any("port-d5x", "port-pic32cxsg"))]
                     M => {
                         fields.pmux = 12;
                     }
-                    #[hal_cfg("port-d5x")]
+                    #[hal_cfg(any("port-d5x", "port-pic32cxsg"))]
                     N => {
                         fields.pmux = 13;
                     }

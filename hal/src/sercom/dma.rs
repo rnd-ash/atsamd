@@ -195,7 +195,7 @@ where
             .as_mut()
             .enable_interrupts(InterruptFlags::new().with_tcmpl(true));
 
-        #[hal_cfg("sercom0-d5x")]
+        #[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
         let trigger_action = TriggerAction::Burst;
 
         #[hal_cfg(any("sercom0-d11", "sercom0-d21"))]
@@ -238,7 +238,7 @@ where
             .as_mut()
             .enable_interrupts(InterruptFlags::new().with_tcmpl(true));
 
-        #[hal_cfg("sercom0-d5x")]
+        #[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
         let trigger_action = TriggerAction::Burst;
 
         #[hal_cfg(any("sercom0-d11", "sercom0-d21"))]
@@ -291,7 +291,7 @@ pub(super) unsafe fn read_dma_linked<T, B, S>(
     B: Buffer<Beat = T>,
     S: Sercom,
 {
-    #[hal_cfg("dmac-d5x")]
+    #[hal_cfg(any("dmac-d5x", "dma-pic32cxsg"))]
     let trigger_action = TriggerAction::Burst;
 
     #[hal_cfg(any("dmac-d11", "dmac-d21"))]
@@ -349,7 +349,7 @@ pub(super) unsafe fn write_dma_linked<T, B, S>(
     B: Buffer<Beat = T>,
     S: Sercom,
 {
-    #[hal_cfg("dmac-d5x")]
+    #[hal_cfg(any("dmac-d5x", "dma-pic32cxsg"))]
     let trigger_action = TriggerAction::Burst;
 
     #[hal_cfg(any("dmac-d11", "dmac-d21"))]
@@ -415,7 +415,7 @@ pub(crate) mod async_dma {
         B: Buffer<Beat = T>,
         S: Sercom,
     {
-        #[hal_cfg("dmac-d5x")]
+        #[hal_cfg(any("dmac-d5x", "dma-pic32cxsg"))]
         let trigger_action = TriggerAction::Burst;
 
         #[hal_cfg(any("dmac-d11", "dmac-d21"))]
@@ -473,7 +473,7 @@ pub(crate) mod async_dma {
         T: Beat,
         S: Sercom,
     {
-        #[hal_cfg("dmac-d5x")]
+        #[hal_cfg(any("dmac-d5x", "dma-pic32cxsg"))]
         let trigger_action = TriggerAction::Burst;
 
         #[hal_cfg(any("dmac-d11", "dmac-d21"))]

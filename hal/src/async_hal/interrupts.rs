@@ -143,7 +143,7 @@ declare_interrupts!(SERCOM4);
 #[hal_cfg("sercom5-d21")]
 declare_interrupts!(SERCOM5);
 
-#[hal_cfg("sercom0-d5x")]
+#[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
 declare_multiple_interrupts!(SERCOM0: [SERCOM0_0, SERCOM0_1, SERCOM0_2, SERCOM0_OTHER ]);
 
 #[hal_cfg("sercom1-d5x")]

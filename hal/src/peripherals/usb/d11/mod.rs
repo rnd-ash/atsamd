@@ -17,7 +17,7 @@ mod devicedesc;
 use self::devicedesc::Descriptors;
 
 /// Emit SOF at 1Khz on this pin when configured as function G
-#[hal_cfg(any("usb-d21", "usb-d5x"))]
+#[hal_cfg(any("usb-d21", "usb-d5x", "usb-pic32cxsg"))]
 pub type SofPad = Pin<crate::gpio::pin::PA23, AlternateG>;
 
 /// USB D- is connected here

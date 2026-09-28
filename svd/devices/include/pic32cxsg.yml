@@ -1,3 +1,5 @@
+## Copied from D5x (Specific patches below)
+
 # CCBUF & DITHERBUF wrong offset & size for CCBUF_DITH4_MODE
 "TCC?":
   "CCBUF_DITH4_MODE?%s?":
@@ -161,3 +163,37 @@ DMAC:
           AES_RD:       [0x52, "DMA DATA Read trigger"]
           QSPI_RX:      [0x53, "Indexes of QSPI RX trigger"]
           QSPI_TX:      [0x54, "Indexes of QSPI TX trigger"]
+
+# PIC32CXSG patches:
+"ADC?":
+  INPUTCTRL:
+    MUXNEG:
+      _replace_enum:
+        # ADC INPUTCTRL GND got renamed to AVSS
+        _name: MUXNEG
+        AIN0:      [0x00, "ADC AIN0 pin"]
+        AIN1:      [0x01, "ADC AIN1 pin"]
+        AIN2:      [0x02, "ADC AIN2 pin"]
+        AIN3:      [0x03, "ADC AIN3 pin"]
+        AIN4:      [0x04, "ADC AIN4 pin"]
+        AIN5:      [0x05, "ADC AIN5 pin"]
+        AIN6:      [0x06, "ADC AIN6 pin"]
+        AIN7:      [0x07, "ADC AIN7 pin"]
+        GND:      [0x18, "Internal ground"]
+  AVGCTRL:
+    SAMPLENUM:
+      _replace_enum:
+        # ADC SAMPLENUM got renamed from `SAMPLENUM_x` to 'x'
+        _name: SAMPLENUM
+        SAMPLENUM_1: [0x00, "1 sample"]
+        SAMPLENUM_2: [0x01, "2 samples"]
+        SAMPLENUM_4: [0x02, "4 samples"]
+        SAMPLENUM_8: [0x03, "8 samples"]
+        SAMPLENUM_16: [0x04, "16 samples"]
+        SAMPLENUM_32: [0x05, "32 samples"]
+        SAMPLENUM_64: [0x06, "64 samples"]
+        SAMPLENUM_128: [0x07, "128 samples"]
+        SAMPLENUM_256: [0x08, "256 samples"]
+        SAMPLENUM_512: [0x09, "512 samples"]
+        SAMPLENUM_1024: [0x0A, "1024 samples"]
+    
