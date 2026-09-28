@@ -1,0 +1,7 @@
+_svd: "../PIC32CX1025SG41128.svd"
+
+_include:
+  - "include/pic32cxsg.yml"
+
+_modify:
+  version: "3.12.276"

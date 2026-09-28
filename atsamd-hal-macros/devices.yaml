@@ -142,7 +142,7 @@ families:
       - pcc
       - pdec
 
-pic32cxsg:
+  pic32cxsg:
     pins:
       pic32cxsg41064: ["pins-064"]
       pic32cxsg41080: ["pins-080"]

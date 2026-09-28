@@ -1,0 +1,33 @@
+[package]
+name = "pic32cxsg41128"
+description = "Peripheral access API for PIC32CXSG microcontrollers (generated using svd2rust)"
+version = "0.14.2"
+authors = [
+   "Wez Furlong <wez@wezfurlong.org>",
+   "Paul Sajna <sajattack@gmail.com>",
+   "Shella Stephens <shella@infracoven.io",
+   "Michael van Niekerk <mvniekerk@gmail.com>"
+]
+keywords = ["no-std", "arm", "cortex-m"]
+categories = ["embedded", "hardware-support", "no-std"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/atsamd-rs/atsamd"
+readme = "README.md"
+edition = "2024"
+
+[dependencies]
+cortex-m = "0.7"
+cortex-m-rt = { version = "0.7", optional = true }
+critical-section = { version = "1.2.0", optional = true }
+portable-atomic = "1.15.0"
+vcell = "0.1"
+
+[build-dependencies]
+atsamd-hal-pac-builder = { path = "../../atsamd-hal-pac-builder" }
+
+[features]
+rt = ["cortex-m-rt/device"]
+critical-section = ["dep:critical-section"]
+
+[package.metadata]
+chip = "pic32cxsg41128"
