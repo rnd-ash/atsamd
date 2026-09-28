@@ -103,6 +103,18 @@ atsame53n = {version = "0.14.2", path = "../pac/atsame53n", optional = true}
 atsame54n = {version = "0.14.2", path = "../pac/atsame54n", optional = true}
 atsame54p = {version = "0.14.2", path = "../pac/atsame54p", optional = true}
 
+
+pic32cxsg41064 = {version = "0.14.2", path = "../pac/pic32cxsg41064", optional = true}
+pic32cxsg41080 = {version = "0.14.2", path = "../pac/pic32cxsg41080", optional = true}
+pic32cxsg41100 = {version = "0.14.2", path = "../pac/pic32cxsg41100", optional = true}
+pic32cxsg41128 = {version = "0.14.2", path = "../pac/pic32cxsg41128", optional = true}
+
+pic32cxsg60100 = {version = "0.14.2", path = "../pac/pic32cxsg60100", optional = true}
+pic32cxsg60128 = {version = "0.14.2", path = "../pac/pic32cxsg60128", optional = true}
+
+pic32cxsg61100 = {version = "0.14.2", path = "../pac/pic32cxsg61100", optional = true}
+pic32cxsg61128 = {version = "0.14.2", path = "../pac/pic32cxsg61128", optional = true}
+
 #===============================================================================
 # Features
 #===============================================================================
@@ -144,6 +156,17 @@ same53n = ["device", "dep:atsame53n", "atsame53n/critical-section"]
 same54n = ["device", "dep:atsame54n", "atsame54n/critical-section"]
 same54p = ["device", "dep:atsame54p", "atsame54p/critical-section"]
 
+pic32cxsg41064 = ["device", "dep:pic32cxsg41064", "pic32cxsg41064/critical-section"]
+pic32cxsg41080 = ["device", "dep:pic32cxsg41080", "pic32cxsg41080/critical-section"]
+pic32cxsg41100 = ["device", "dep:pic32cxsg41100", "pic32cxsg41100/critical-section"]
+pic32cxsg41128 = ["device", "dep:pic32cxsg41128", "pic32cxsg41128/critical-section"]
+
+pic32cxsg60100 = ["device", "dep:pic32cxsg60100", "pic32cxsg60100/critical-section"]
+pic32cxsg60128 = ["device", "dep:pic32cxsg60128", "pic32cxsg60128/critical-section"]
+
+pic32cxsg61100 = ["device", "dep:pic32cxsg61100", "pic32cxsg61100/critical-section"]
+pic32cxsg61128 = ["device", "dep:pic32cxsg61128", "pic32cxsg61128/critical-section"]
+
 #-------------------------------------------------------------------------------
 # RT features
 #-------------------------------------------------------------------------------
@@ -175,6 +198,17 @@ same53n-rt = ["same53n", "atsame53n/rt"]
 
 same54n-rt = ["same54n", "atsame54n/rt"]
 same54p-rt = ["same54p", "atsame54p/rt"]
+
+pic32cxsg41064-rt = ["pic32cxsg41064", "pic32cxsg41064/rt"]
+pic32cxsg41080-rt = ["pic32cxsg41080", "pic32cxsg41080/rt"]
+pic32cxsg41100-rt = ["pic32cxsg41100", "pic32cxsg41100/rt"]
+pic32cxsg41128-rt = ["pic32cxsg41128", "pic32cxsg41128/rt"]
+
+pic32cxsg60100-rt = ["pic32cxsg60100", "pic32cxsg60100/rt"]
+pic32cxsg60128-rt = ["pic32cxsg60128", "pic32cxsg60128/rt"]
+
+pic32cxsg61100-rt = ["pic32cxsg61100", "pic32cxsg61100/rt"]
+pic32cxsg61128-rt = ["pic32cxsg61128", "pic32cxsg61128/rt"]
 
 #-------------------------------------------------------------------------------
 # User-selectable features
