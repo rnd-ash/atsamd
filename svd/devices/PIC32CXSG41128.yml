@@ -1,4 +1,4 @@
-_svd: "../PIC32CX1025SG41128.svd"
+_svd: "../PIC32CXSG41128.svd"
 
 _include:
   - "include/pic32cxsg.yml"
