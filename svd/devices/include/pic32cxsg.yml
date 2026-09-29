@@ -238,4 +238,5 @@ EIC:
    # merge them back into an array so that they look the same as on D5x
   _array:
     "CONFIG?":
+      dimIncrement: 4 # SG41064 doesn't specify this correctly (The other chips do)
       name: "CONFIG[%s]"
