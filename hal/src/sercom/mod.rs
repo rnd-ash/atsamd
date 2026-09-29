@@ -177,25 +177,25 @@ sercom!(apbcmask, 5);
 #[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
 sercom!(apbamask, 0);
 
-#[hal_cfg(any("sercom1-d5x", "sercom0-pic32cxsg"))]
+#[hal_cfg(any("sercom1-d5x", "sercom1-pic32cxsg"))]
 sercom!(apbamask, 1);
 
-#[hal_cfg(any("sercom2-d5x", "sercom0-pic32cxsg"))]
+#[hal_cfg(any("sercom2-d5x", "sercom2-pic32cxsg"))]
 sercom!(apbbmask, 2);
 
-#[hal_cfg(any("sercom3-d5x", "sercom0-pic32cxsg"))]
+#[hal_cfg(any("sercom3-d5x", "sercom3-pic32cxsg"))]
 sercom!(apbbmask, 3);
 
-#[hal_cfg(any("sercom4-d5x", "sercom0-pic32cxsg"))]
+#[hal_cfg(any("sercom4-d5x", "sercom4-pic32cxsg"))]
 sercom!(apbdmask, 4);
 
-#[hal_cfg(any("sercom5-d5x", "sercom0-pic32cxsg"))]
+#[hal_cfg(any("sercom5-d5x", "sercom5-pic32cxsg"))]
 sercom!(apbdmask, 5);
 
-#[hal_cfg(any("sercom6-d5x", "sercom0-pic32cxsg"))]
+#[hal_cfg(any("sercom6-d5x", "sercom6-pic32cxsg"))]
 sercom!(apbdmask, 6);
 
-#[hal_cfg(any("sercom7-d5x", "sercom0-pic32cxsg"))]
+#[hal_cfg(any("sercom7-d5x", "sercom7-pic32cxsg"))]
 sercom!(apbdmask, 7);
 
 // Reserve space for the max number of SERCOM peripherals based on chip type,
