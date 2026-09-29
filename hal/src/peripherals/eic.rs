@@ -85,11 +85,7 @@ pub use impls::async_api::*;
 #[hal_cfg(any("eic-d5x", "eic-pic32cxsg"))]
 use super::clock::v2::{self, gclk::GclkId, osculp32k::OscUlp32kId, pclk::Pclk, rtcosc::RtcOsc};
 
-#[hal_cfg(not("eic-pic32cxsg"))]
 pub type Sense = pac::eic::config::Sense0select;
-
-#[hal_cfg("eic-pic32cxsg")]
-pub type Sense = pac::eic::config0::Sense0select;
 
 /// Trait representing an EXTINT channel ID.
 pub trait ChId {

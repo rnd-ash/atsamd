@@ -404,7 +404,7 @@ where
     }
 
     #[cfg(doc)]
-    #[hal_cfg(not("dmac-d5x"))]
+    #[hal_cfg(not(any("dmac-d5x", "dmac-pic32cxsg")))]
     /// This method is not present with the selected feature set, defined for
     /// documentation only
     pub fn fifo_threshold(&mut self) {
@@ -422,7 +422,7 @@ where
     }
 
     #[cfg(doc)]
-    #[hal_cfg(not("dmac-d5x"))]
+    #[hal_cfg(not(any("dmac-d5x", "dmac-pic32cxsg")))]
     /// This method is not present with the selected feature set, defined for
     /// documentation only
     pub fn burst_length(&mut self) {

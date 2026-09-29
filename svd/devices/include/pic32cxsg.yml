@@ -1,4 +1,4 @@
-## Copied from D5x (Specific patches below)
+## Copied from D5x (See note about specific PIC32CXSG patches)
 
 # CCBUF & DITHERBUF wrong offset & size for CCBUF_DITH4_MODE
 "TCC?":
@@ -21,6 +21,24 @@ NVMCTRL:
         _name: SEESelect
         SMARTEEPROM: [0x1, "SmartEEPROM is supported"]
         NOSMARTEEPROM: [0x0, "No SmartEEPROM support"]
+    PSZ: # PIC32CXSG specific (PSZ fields are renamed from `PSZ_x` to 'x')
+      _replace_enum:
+        _name: PSZ
+        PSZ_8: [0x0, "8 bytes"]
+        PSZ_16: [0x1, "16 bytes"]
+        PSZ_32: [0x2, "32 bytes"]
+        PSZ_64: [0x3, "64 bytes"]
+        PSZ_128: [0x4, "128 bytes"]
+        PSZ_256: [0x5, "256 bytes"]
+        PSZ_512: [0x6, "512 bytes"]
+        PSZ_1024: [0x7, "1024 bytes"]
+
+  SEECFG: # PIC32CXSG specific (BUFFERED is missing)
+    WMODE:
+      _replace_enum:
+        _name: WMODE
+        UNBUFFERED: [0x0, "A NVM write command is issued after each write in the pagebuffer"]
+        BUFFERED: [0x1, "A NVM write command is issued when a write to a new page is requested"]
 
 # The SDHC peripheral on some devices contains reset values for certain
 # fields that are wider than their corresponding storage. Replace the
@@ -69,6 +87,16 @@ EVSYS:
           TXPO_0: [0x0, "TxD on PAD0, XCK on PAD1"]
           TXPO_2: [0x2, "TxD on PAD0, RTS/TE on PAD2, CTS on PAD3"]
           TXPO_3: [0x3, "TxD on PAD0, XCK on PAD1, RTS/TE on PAD2"]
+  SPIM: # PIC32CXSG - MSSEN is missing from SPI CTRLB
+    CTRLB:
+      _add:
+        MSSEN:
+          bitOffset: 13
+          bitWidth: 1
+          description: "Host SPI Select Enable"
+          resetValue: 0
+          access: READ_WRITE
+
 
 # The DMAC trigger sources in the original SVD only have the 0=disabled
 # enumeration value.
@@ -164,7 +192,7 @@ DMAC:
           QSPI_RX:      [0x53, "Indexes of QSPI RX trigger"]
           QSPI_TX:      [0x54, "Indexes of QSPI TX trigger"]
 
-# PIC32CXSG patches:
+# PIC32CXSG ADC Patches:
 "ADC?":
   INPUTCTRL:
     MUXNEG:
@@ -184,7 +212,7 @@ DMAC:
     SAMPLENUM:
       _replace_enum:
         # ADC SAMPLENUM got renamed from `SAMPLENUM_x` to 'x'
-        _name: SAMPLENUM
+        _name: SAMPLENUMSELECT
         SAMPLENUM_1: [0x00, "1 sample"]
         SAMPLENUM_2: [0x01, "2 samples"]
         SAMPLENUM_4: [0x02, "4 samples"]
@@ -196,4 +224,18 @@ DMAC:
         SAMPLENUM_256: [0x08, "256 samples"]
         SAMPLENUM_512: [0x09, "512 samples"]
         SAMPLENUM_1024: [0x0A, "1024 samples"]
-    
+SUPC: # PIC32CXSG is missing TSEN enable on SUPC
+  VREF:
+    _add:
+      TSEN:
+        bitOffset: 1
+        bitWidth: 1
+        description: "Temperature Sensor Enable"
+        resetValue: 0
+        access: READ_WRITE
+EIC:
+   # PIC32CXSG - EIC Config array got split into 2 distinct registers Config0/1 with the same contents
+   # merge them back into an array so that they look the same as on D5x
+  _array:
+    "CONFIG?":
+      name: "CONFIG[%s]"

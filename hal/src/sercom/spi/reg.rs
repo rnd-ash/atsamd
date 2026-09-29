@@ -75,7 +75,6 @@ impl<S: Sercom> Registers<S> {
     #[hal_macro_helper]
     pub fn set_op_mode(&mut self, mode: Modeselect, mssen: bool) {
         self.spi().ctrla().modify(|_, w| w.mode().variant(mode));
-        #[hal_cfg(not("sercom0-pic32cxsg"))]
         self.spi().ctrlb().modify(|_, w| w.mssen().bit(mssen));
         #[hal_cfg(any("sercom0-d5x", "sercom0-pic32cxsg"))]
         self.spi().ctrlc().write(|w| unsafe {
