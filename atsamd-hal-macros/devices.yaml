@@ -144,8 +144,8 @@ families:
 
   pic32cxsg:
     pins:
-      pic32cxsg41064: ["pins-064"]
-      pic32cxsg41080: ["pins-080"]
+      pic32cxsg41064: ["pins-64"]
+      pic32cxsg41080: ["pins-80"]
       pic32cxsg41100: ["pins-100"]
       pic32cxsg41128: ["pins-128"]
       pic32cxsg60100: ["pins-100"]
